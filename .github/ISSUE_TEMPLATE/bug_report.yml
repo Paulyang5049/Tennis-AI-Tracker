@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a reproducible problem with local analysis or training.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not upload private match footage without every identifiable participant's permission.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Include the command or interface steps and whether the footage is phone/broadcast and singles/doubles.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: macOS/Linux, CPU/MPS/CUDA, Python version
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or non-private sample
+      description: Remove personal paths or other private information before posting.
