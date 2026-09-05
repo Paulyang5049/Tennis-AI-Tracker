@@ -50,7 +50,7 @@ Open http://127.0.0.1:7860. Upload a video, select Singles or Doubles, and click
 
 ## Reproduce installation
 
-Requires Python 3.11 or 3.12 and FFmpeg on your path. Python 3.11 is the tested local environment.
+Requires Python 3.11, 3.12 or 3.13 and FFmpeg on your path. Python 3.11 is the tested local environment; the training workflow is also exercised with Python 3.13 in Colab.
 
 ```sh
 uv venv --python 3.11 .venv
@@ -93,6 +93,8 @@ Use the Colab badge above or open either notebook from the `notebooks/` folder. 
 2. `02_finetune_court.ipynb`: download/audit court data, verify pretrained inference, optionally fine-tune the original heatmap model and export a court bundle.
 
 Data and active training are on `/content`; resumable checkpoints and final bundles go to `MyDrive/TennisAI`. Ball defaults: 100 maximum epochs, patience 20, batch 4 with 2/1 retries for CUDA memory errors. Use `RESUME=True` in the ball notebook after a runtime disconnect. Court resumes from its Drive optimizer/epoch checkpoint automatically.
+
+The `v0.2.0` release includes an experimental ball bundle from a completed Tesla T4 run. It improved recall on the validation split but failed the untouched test split and produced more false detections, so the app continues to use the COCO sports-ball model by default. The bundle is published to make the result reproducible and to give contributors a concrete baseline for improving data splits, labels and training settings. See [VALIDATION.md](VALIDATION.md) for the measured results.
 
 The wheel pins the same PyTorch/Ultralytics versions used locally. If Colab replaces an already imported dependency, restart the runtime and continue after installation. GPU quota or download availability may stop a training run; the local baseline does not depend on training success.
 

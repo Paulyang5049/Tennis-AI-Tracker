@@ -12,7 +12,7 @@ Thank you for helping build an open tennis-analysis tool for players and develop
 
 ## Development setup
 
-Use Python 3.11 or 3.12 and FFmpeg:
+Use Python 3.11, 3.12 or 3.13 and FFmpeg:
 
 ```sh
 uv venv --python 3.11 .venv
