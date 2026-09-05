@@ -194,49 +194,50 @@ def create_app(root):
                 label="Local ball bundle folder",
                 placeholder="Leave blank for pretrained sports-ball baseline",
             )
-            ball_check = gr.Button("Check ball bundle")
+            ball_check: Any = gr.Button("Check ball bundle")
             court = gr.Textbox(
                 label="Local court bundle folder",
                 placeholder="Leave blank for downloaded court model",
             )
-            court_check = gr.Button("Check court bundle")
+            court_check: Any = gr.Button("Check court bundle")
             bundle_message = gr.Textbox(label="Bundle verification", interactive=False)
         with gr.Row():
-            run = gr.Button("Analyze video", variant="primary")
-            stop = gr.Button("Cancel")
+            run: Any = gr.Button("Analyze video", variant="primary")
+            stop: Any = gr.Button("Cancel")
         status = gr.Textbox(label="Progress", interactive=False)
         with gr.Row():
             original = gr.Video(label="Original", interactive=False, elem_id="original-video")
             annotated = gr.Video(label="Analysis", interactive=False, elem_id="annotated-video")
-        overlays = gr.CheckboxGroup(
+        overlays: Any = gr.CheckboxGroup(
             DEFAULT_OVERLAYS, value=DEFAULT_OVERLAYS, label="Visible overlays"
         )
         with gr.Row():
-            rerender = gr.Button("Re-export from cached predictions")
+            rerender: Any = gr.Button("Re-export from cached predictions")
             files = gr.File(label="Downloads", file_count="multiple", interactive=False)
         gr.Markdown(
             "### Frame review & corrections\nSelect a frame, then click the **original image** in this order: far-left, far-right, near-left, near-right **outer court corners**. Correction lasts until a camera cut/movement or your next correction. Player labels apply within the current scene."
         )
-        frame = gr.Slider(0, 1, step=1, value=0, label="Frame")
+        frame: Any = gr.Slider(0, 1, step=1, value=0, label="Frame")
         with gr.Row():
-            previous = gr.Button("← Previous frame")
-            next_frame = gr.Button("Next frame →")
-            refresh = gr.Button("Show frame / reset corner selection")
+            previous: Any = gr.Button("← Previous frame")
+            next_frame: Any = gr.Button("Next frame →")
+            refresh: Any = gr.Button("Show frame / reset corner selection")
         with gr.Row():
-            raw_image = gr.Image(
+            raw_image: Any = gr.Image(
                 label="Original · click four corners", type="numpy", interactive=False
             )
             overlay_image = gr.Image(label="Annotated frame", type="numpy", interactive=False)
-        save_court = gr.Button("Save these four court corners")
+        save_court: Any = gr.Button("Save these four court corners")
         labels = gr.Textbox(
             label="Player labels for this scene", value='{"1": "Paul", "2": "Opponent"}'
         )
-        save_labels = gr.Button("Save player labels")
+        save_labels: Any = gr.Button("Save player labels")
         detail = gr.JSON(label="Frame detections")
         summary = gr.JSON(label="Run details and coverage (not accuracy)")
         run.click(start, [video, mode, device, ball, court], [job_state, status])
         stop.click(cancel, job_state, status, queue=False)
-        gr.Timer(1).tick(
+        timer: Any = gr.Timer(1)
+        timer.tick(
             poll,
             job_state,
             [status, folder_state, original, annotated, files, frame, summary],
