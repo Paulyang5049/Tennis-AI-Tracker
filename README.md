@@ -1,28 +1,34 @@
 # Tennis AI · Local
 
+![Tennis AI: Your match. Your memories. On your machine.](docs/images/hero.svg)
+
 [![Tests](https://github.com/Paulyang5049/tennis-ai-local/actions/workflows/test.yml/badge.svg)](https://github.com/Paulyang5049/tennis-ai-local/actions/workflows/test.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Open Ball Training in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Paulyang5049/tennis-ai-local/blob/main/notebooks/01_train_ball_yolo26.ipynb)
 
-A private, local-first YOLO26 tennis-video analysis and replay app for Apple Silicon and CPU, with portable Google Colab training notebooks. It supports selectable two-player or four-player analysis for full-court phone and broadcast footage. Processing is offline rather than real time.
+Record the rallies. Revisit the details. Keep your videos private.
 
-## Why this project exists
+Tennis AI Local is an open-source desktop app for analyzing and replaying full-court tennis videos. It runs YOLO26 locally on Apple Silicon or CPU, supports singles and doubles, and provides Google Colab notebooks for model training. Model setup needs internet access; normal video analysis runs locally.
 
-Tennis is more than points and statistics. A recording can preserve a match, a friendship, a difficult training day and the small improvements that accumulate over time.
+## A look inside
 
-Tennis AI Local hopes to help tennis lovers record those moments and understand their game without sending personal videos to a server. It also gives developers an open foundation for experimenting with ball tracking, player pose, racket detection and court geometry. The long-term goal is a community-built tool that helps players revisit their tennis life and make thoughtful improvements to their performance.
+![Current desktop application: upload, analysis controls and side-by-side replay areas](docs/images/desktop.png)
 
-This is an early-stage project, and contributions from players, coaches, computer-vision researchers, designers and developers are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for useful first contributions.
+*Actual screenshot of the published desktop app in its empty state. No detection results or accuracy figures are simulated. The banner is an original illustration.*
 
-## What it can do
+![Workflow: import a recording, analyze locally, review exact frames, export the replay](docs/images/workflow.svg)
 
-- Track a tennis ball and render a timestamp-aware trail.
-- Detect and track two or four players.
-- Draw body poses, rackets and reconstructed court lines.
-- Project player ground positions onto a miniature court.
-- Review exact frames, correct court corners and label players.
-- Export an annotated video, structured frame data and a run summary.
-- Train a dedicated YOLO26 tennis-ball detector in Google Colab.
+## Built for your tennis life
+
+A recording can preserve a match, a friendship, a difficult training day and the small improvements that accumulate over time. This project helps players revisit those moments without sending personal footage to a server.
+
+- **Follow the action:** track the ball and two or four players; overlay poses and racket detections.
+- **See the court:** draw court geometry and estimated player ground positions.
+- **Review with control:** synchronized replay, exact-frame inspection, manual court calibration and player labels.
+- **Keep your work:** export an annotated video, per-frame JSONL and a run summary.
+- **Experiment openly:** train a dedicated ball detector with the included Colab notebooks.
+
+This is an early-stage research and development tool. Coverage is not accuracy. The experimental trained ball candidate failed its held-out promotion gate, so the pretrained baseline remains the default. Read the measured results and limitations in [VALIDATION.md](VALIDATION.md).
 
 ## Start on this Mac
 
