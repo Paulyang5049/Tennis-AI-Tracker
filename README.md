@@ -16,6 +16,10 @@ Tennis AI Local is an open-source desktop app for analyzing and replaying full-c
 
 *Actual screenshot of the published desktop app in its empty state. No detection results or accuracy figures are simulated. The banner is an original illustration.*
 
+![Development preview: court-green and tennis-yellow desktop interface with match library, review, events and settings tabs](docs/images/desktop-preview.png)
+
+*Actual running development preview in its empty state. This redesigned interface is not yet included in the main-branch installation; the published interface is shown in the first screenshot. No match results are simulated.*
+
 ![Workflow: import a recording, analyze locally, review exact frames, export the replay](docs/images/workflow.svg)
 
 ## Built for your tennis life
