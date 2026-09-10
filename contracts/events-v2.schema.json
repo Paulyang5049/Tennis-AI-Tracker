@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AnalysisPackage v2 events",
+  "type": "object", "required": ["schema_version", "events"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "events": {"type": "array", "items": {"$ref": "#/$defs/event"}}
+  },
+  "$defs": {
+    "event": {
+      "type": "object",
+      "required": ["id", "kind", "start", "end", "scene", "player_id", "stroke", "position", "provenance", "reviewed", "confidence", "excluded", "favorite"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1}, "kind": {"enum": ["hit", "bounce", "rally"]},
+        "start": {"type": "number", "minimum": 0}, "end": {"type": "number", "minimum": 0},
+        "scene": {"type": "integer", "minimum": 0}, "player_id": {"type": ["integer", "null"]},
+        "stroke": {"enum": ["serve", "forehand", "backhand", "volley", "overhead", "unknown"]},
+        "position": {"type": ["array", "null"], "minItems": 2, "maxItems": 2, "items": {"type": "number"}},
+        "provenance": {"enum": ["automatic", "manual"]}, "reviewed": {"type": "boolean"},
+        "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "excluded": {"type": "boolean"}, "favorite": {"type": "boolean"}
+      },
+      "description": "Runtime additionally enforces end >= start, instantaneous hit/bounce times, unique IDs, and bounce-only positions."
+    }
+  }
+}

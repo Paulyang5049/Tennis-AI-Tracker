@@ -1,0 +1,68 @@
+{
+  "reviewer": "correctness",
+  "findings": [
+    {
+      "title": "Point-event clip export always rejects",
+      "severity": "P1",
+      "file": "src/tennis_ai/app.py",
+      "line": 319,
+      "why_it_matters": "Users cannot export clips for hits or bounces from the desktop event UI: the shared event contract requires point events to have end equal to start, while this handler forwards that zero-length interval to an exporter that requires start to be strictly less than end. Every normal hit/bounce reaches the same deterministic error. Expanding point events to a bounded interval around the timestamp, as the iOS ClipExporter already does, makes the advertised event export usable while preserving rally intervals.",
+      "autofix_class": "gated_auto",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "suggested_fix": "In make_clip, load the video duration and convert start == end into a bounded window such as max(0, start - 2) through min(duration, end + 2), matching ios/TennisApp/AnalysisEngine.swift; keep explicit start/end for rallies.",
+      "confidence": 100,
+      "evidence": [
+        "src/tennis_ai/app.py:319 -- return str(export_clip(folder, start, end))",
+        "src/tennis_ai/library.py:58 -- or not 0 <= start < end <= summary[\"video\"][\"duration\"]",
+        "src/tennis_ai/events.py:35-36 -- if event[\"kind\"] != \"rally\" and event[\"end\"] != event[\"start\"]: raise ValueError(\"Point events must have identical start/end times\")"
+      ],
+      "pre_existing": false
+    },
+    {
+      "title": "Incomplete imports are silently marked complete",
+      "severity": "P1",
+      "file": "ios/TennisApp/Library.swift",
+      "line": 73,
+      "why_it_matters": "An analysis folder missing frames, events, or corrections is accepted, and the new store is then marked complete. A damaged transfer can therefore appear successfully imported while silently losing predictions or durable human edits; the Start/Continue action also returns immediately because the store says complete. Requiring the declared artifacts and preserving the manifest status prevents corrupt or paused packages from being converted into false completions.",
+      "autofix_class": "gated_auto",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "suggested_fix": "Reject a package when any required artifact declared by manifest.artifacts is missing, import each required file, and initialize the store status from manifest.status instead of unconditionally setting .complete; only a manifest that is complete should produce a complete imported store.",
+      "confidence": 100,
+      "evidence": [
+        "ios/TennisApp/Library.swift:73-74 -- if FileManager.default.fileExists(atPath:input.path) { try FileManager.default.copyItem(at:input,to:target) } else if relative==manifest.media.path { throw PackageError.invalid(\"Source video is missing from package\") }",
+        "ios/TennisApp/Library.swift:82 -- if FileManager.default.fileExists(atPath:frames.path) { try store.importFrames(from:frames) }",
+        "ios/TennisApp/Library.swift:90-91 -- if FileManager.default.fileExists(atPath:corrections.path) { try store.saveCorrections(ContractJSON.read(Corrections.self,from:corrections)) }; try store.setStatus(.complete)"
+      ],
+      "pre_existing": false
+    },
+    {
+      "title": "Swift accepts positions on non-bounce events",
+      "severity": "P2",
+      "file": "ios/Sources/TennisCore/Contract.swift",
+      "line": 121,
+      "why_it_matters": "A portable package containing a hit or rally with a position passes the Swift importer and can be re-exported, but the desktop contract validator rejects the same record because court positions are bounce-only. That breaks round-trip interoperability for an input the native side claims is valid. Enforcing the shared semantic rule in AnalysisEvent.validate keeps both implementations aligned.",
+      "autofix_class": "gated_auto",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "suggested_fix": "In AnalysisEvent.validate, reject non-nil position unless kind == .bounce, then add a shared-fixture/import test for a hit carrying position and assert that both Swift and Python reject it.",
+      "confidence": 100,
+      "evidence": [
+        "ios/Sources/TennisCore/Contract.swift:121 -- if let p = position { guard p.count == 2, p.allSatisfy(\\.isFinite) else { throw PackageError.invalid(\"Invalid court position\") } }",
+        "ios/TennisApp/Library.swift:87 -- for event in events.events { try store.saveEvent(event,duration:manifest.media.duration) }",
+        "src/tennis_ai/events.py:59-60 -- if event[\"kind\"] != \"bounce\" or not isinstance(point, (list, tuple)) or len(point) != 2: raise ValueError(\"Only bounce events can have a court position [x, y]\")"
+      ],
+      "pre_existing": false
+    }
+  ],
+  "residual_risks": [
+    "The simulator smoke test exercises a short valid complete-package round trip, but it does not establish physical-device behavior, long-run thermal/storage recovery, or imported paused-package semantics.",
+    "Package manifests authenticate the source video but do not checksum frames, events, or corrections, so post-export corruption of analysis artifacts is detected only when parsing or structural invariants happen to fail."
+  ],
+  "testing_gaps": [
+    "No desktop UI/integration test exports a hit or bounce whose contract-valid end equals start.",
+    "No iOS import test covers a missing required artifact or a paused/inference-complete manifest.",
+    "Shared contract tests do not include semantically invalid cross-platform events such as a hit with a court position."
+  ]
+}

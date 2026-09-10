@@ -1,0 +1,7 @@
+{
+  "run_id": "full-feature-20260910-closure",
+  "branch": "feat/offline-ios-foundation",
+  "head_sha": "9f3925e4cce675a1b0ee3e91209cdf903bec6e1a",
+  "verdict": "Ready to merge",
+  "completed_at": "2026-09-10T08:43:21.550412+00:00"
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "reviewer": "correctness",
+    "findings": [
+      {"title":"Point-event clip export always rejects","severity":"P1","file":"src/tennis_ai/app.py","line":319,"confidence":100,"autofix_class":"gated_auto","owner":"downstream-resolver","requires_verification":true,"pre_existing":false,"suggested_fix":"In make_clip, load the video duration and convert start == end into a bounded window such as max(0, start - 2) through min(duration, end + 2), matching ios/TennisApp/AnalysisEngine.swift; keep explicit start/end for rallies.","first_evidence":"src/tennis_ai/app.py:319 -- return str(export_clip(folder, start, end))"},
+      {"title":"Incomplete imports are silently marked complete","severity":"P1","file":"ios/TennisApp/Library.swift","line":73,"confidence":100,"autofix_class":"gated_auto","owner":"downstream-resolver","requires_verification":true,"pre_existing":false,"suggested_fix":"Reject a package when any required artifact declared by manifest.artifacts is missing, import each required file, and initialize the store status from manifest.status instead of unconditionally setting .complete; only a manifest that is complete should produce a complete imported store.","first_evidence":"ios/TennisApp/Library.swift:73-74 -- if FileManager.default.fileExists(atPath:input.path) { try FileManager.default.copyItem(at:input,to:target) } else if relative==manifest.media.path { throw PackageError.invalid(\"Source video is missing from package\") }"},
+      {"title":"Swift accepts positions on non-bounce events","severity":"P2","file":"ios/Sources/TennisCore/Contract.swift","line":121,"confidence":100,"autofix_class":"gated_auto","owner":"downstream-resolver","requires_verification":true,"pre_existing":false,"suggested_fix":"In AnalysisEvent.validate, reject non-nil position unless kind == .bounce, then add a shared-fixture/import test for a hit carrying position and assert that both Swift and Python reject it.","first_evidence":"ios/Sources/TennisCore/Contract.swift:121 -- if let p = position { guard p.count == 2, p.allSatisfy(\\.isFinite) else { throw PackageError.invalid(\"Invalid court position\") } }"}
+    ],
+    "residual_risks": [],
+    "testing_gaps": []
+  },
+  {
+    "reviewer": "swift-ios",
+    "findings": [
+      {"title":"Imported partial analyses are marked complete","severity":"P1","file":"ios/TennisApp/Library.swift","line":91,"confidence":100,"autofix_class":"manual","owner":"downstream-resolver","requires_verification":true,"pre_existing":false,"suggested_fix":"Branch on manifest.status during import: retain imported results as complete only when the package is actually complete; for incomplete packages, either rebuild and checkpoint the full tracker/temporal RuntimeState from the imported frames or initialize a fresh zero-frame store and rerun inference from the contained source. Keep the stored status and ResumeIdentity consistent with the chosen path.","first_evidence":"ios/TennisApp/Library.swift:91 -- try store.setStatus(.complete)"},
+      {"title":"Package import blocks the main actor","severity":"P1","file":"ios/TennisApp/TennisApp.swift","line":35,"confidence":75,"autofix_class":"gated_auto","owner":"downstream-resolver","requires_verification":true,"pre_existing":false,"suggested_fix":"Make package import asynchronous and run LocalLibrary.importPackage in a detached or dedicated actor task with explicit cancellation checks; await its result before calling the main-actor reload and error-state updates.","first_evidence":"ios/TennisApp/TennisApp.swift:35 -- Task { do { if package { _=try LocalLibrary.importPackage(url) } else { _=try await LocalLibrary.importVideo(url,players:players) }; try reload() } catch { self.error=error.localizedDescription }; busy=false }"},
+      {"title":"Failed event saves still dismiss editor","severity":"P2","file":"ios/TennisApp/EventEditor.swift","line":40,"confidence":75,"autofix_class":"gated_auto","owner":"downstream-resolver","requires_verification":true,"pre_existing":false,"suggested_fix":"Change save to `(AnalysisEvent) throws -> Void`, call it with `try save(event)`, and have ReviewView's sheet closure perform store.saveEvent and refresh without the non-throwing perform wrapper so EventEditor keeps the sheet open and renders its local error on failure.","first_evidence":"ios/TennisApp/EventEditor.swift:40 -- try event.validate(duration:duration); save(event); dismiss()"}
+    ],
+    "residual_risks": [],
+    "testing_gaps": []
+  }
+]

@@ -1,0 +1,46 @@
+{
+  "status": "complete",
+  "verdict": "Ready to merge",
+  "scope": {
+    "base": "e565b1469fd728168ef8c05e5dae43f0be6490f7",
+    "branch": "docs/visual-readme",
+    "head_sha": "e565b1469fd728168ef8c05e5dae43f0be6490f7",
+    "pr_url": null,
+    "files_changed": 4
+  },
+  "intent": "Publish truthful English README with original tennis banner, actual current app empty-state screenshot and workflow. Keep documentation compatible with main; exclude application WIP.",
+  "intent_confidence": "explicit",
+  "reviewers": [
+    "correctness"
+  ],
+  "findings": [],
+  "actionable_findings": [],
+  "triage_groups": [],
+  "pre_existing_findings": [],
+  "requirements_completeness": null,
+  "learnings": [],
+  "agent_native_gaps": [],
+  "deployment_notes": [],
+  "residual_risks": [
+    "Screenshot visually matches published app controls and contains no simulated detections; capture provenance was not independently reproduced."
+  ],
+  "testing_gaps": [
+    "GitHub post-publication image rendering has not been verified by this leaf review."
+  ],
+  "coverage": {
+    "scope_helper": "complete; four staged files, zero executable lines; full roster",
+    "correctness": "independent leaf completed and collected",
+    "project_standards": "not run; no applicable standards files in reviewed tree",
+    "cross_model": "not selected; static documentation/images only, no runtime or verification-gate mutation; no external sending",
+    "other_conditionals": "not selected; no runtime, testing, migration or agent interface changes",
+    "validators": "none selected; zero findings after required findings-mechanics processing",
+    "malformed_returns": 0,
+    "malformed_findings": 0,
+    "suppressed_by_confidence": {},
+    "settlement_suppression": "not evaluated; no discovered plan artifact",
+    "publication": "GitHub actual rendering remains caller post-push check",
+    "mutations": "only review artifacts outside publication worktree"
+  },
+  "artifact_path": "/Users/pauly/Developer/AI_tennis/docs/reviews/readme-visual-20260907",
+  "run_id": "readme-visual-20260907"
+}

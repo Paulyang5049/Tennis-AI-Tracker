@@ -1,28 +1,46 @@
 # Tennis AI · Local
 
+![Tennis AI: Your match. Your memories. On your machine.](docs/images/hero.svg)
+
 [![Tests](https://github.com/Paulyang5049/tennis-ai-local/actions/workflows/test.yml/badge.svg)](https://github.com/Paulyang5049/tennis-ai-local/actions/workflows/test.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Open Ball Training in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Paulyang5049/tennis-ai-local/blob/main/notebooks/01_train_ball_yolo26.ipynb)
 
-A private, local-first YOLO26 tennis-video analysis and replay app for Apple Silicon and CPU, with portable Google Colab training notebooks. It supports selectable two-player or four-player analysis for full-court phone and broadcast footage. Processing is offline rather than real time.
+Record the rallies. Revisit the details. Keep your videos private.
 
-## Why this project exists
+Tennis AI Local is an open-source desktop app for analyzing and replaying full-court tennis videos. It runs YOLO26 locally on Apple Silicon or CPU, supports singles and doubles, and provides Google Colab notebooks for model training. Model setup needs internet access; normal video analysis runs locally.
 
-Tennis is more than points and statistics. A recording can preserve a match, a friendship, a difficult training day and the small improvements that accumulate over time.
+## A look inside
 
-Tennis AI Local hopes to help tennis lovers record those moments and understand their game without sending personal videos to a server. It also gives developers an open foundation for experimenting with ball tracking, player pose, racket detection and court geometry. The long-term goal is a community-built tool that helps players revisit their tennis life and make thoughtful improvements to their performance.
+![Current desktop application: upload, analysis controls and side-by-side replay areas](docs/images/desktop.png)
 
-This is an early-stage project, and contributions from players, coaches, computer-vision researchers, designers and developers are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for useful first contributions.
+*Actual screenshot of the published desktop app in its empty state. No detection results or accuracy figures are simulated. The banner is an original illustration.*
 
-## What it can do
+![Development preview: court-green and tennis-yellow desktop interface with match library, review, events and settings tabs](docs/images/desktop-preview.png)
 
-- Track a tennis ball and render a timestamp-aware trail.
-- Detect and track two or four players.
-- Draw body poses, rackets and reconstructed court lines.
-- Project player ground positions onto a miniature court.
-- Review exact frames, correct court corners and label players.
-- Export an annotated video, structured frame data and a run summary.
-- Train a dedicated YOLO26 tennis-ball detector in Google Colab.
+*Actual running development preview in its empty state. This redesigned interface is not yet included in the main-branch installation; the published interface is shown in the first screenshot. No match results are simulated.*
+
+![Workflow: import a recording, analyze locally, review exact frames, export the replay](docs/images/workflow.svg)
+
+## Built for your tennis life
+
+A recording can preserve a match, a friendship, a difficult training day and the small improvements that accumulate over time. This project helps players revisit those moments without sending personal footage to a server.
+
+- **Follow the action:** track the ball and two or four players; overlay poses and racket detections.
+- **See the court:** draw court geometry and estimated player ground positions.
+- **Review with control:** synchronized replay, exact-frame inspection, manual court calibration and player labels.
+- **Keep your work:** export an annotated video, per-frame JSONL and a run summary.
+- **Experiment openly:** train a dedicated ball detector with the included Colab notebooks.
+
+This is an early-stage research and development tool. Coverage is not accuracy. The experimental trained ball candidate failed its held-out promotion gate, so the pretrained baseline remains the default. Read the measured results and limitations in [VALIDATION.md](VALIDATION.md).
+
+## In this development branch
+
+The offline upgrade adds portable analysis folders, interruption recovery, saved-match review, candidate event editing, clip export and annotation tools. These additions are undergoing validation; native iOS source is a development app, not an App Store release.
+
+## Offline iPhone development
+
+The native iOS 26 source and build instructions are in [ios/README.md](ios/README.md). The Python app remains the training, annotation and evaluation workspace. See [implementation status](docs/IMPLEMENTATION_STATUS.md) for verified functionality and the remaining phone-validation gates. A successful model conversion or core unit test does not establish iPhone accuracy or sustained match-length performance.
 
 ## Start on this Mac
 
@@ -68,7 +86,11 @@ For a different working directory, pass `--root /absolute/path/to/AI_tennis` **b
 ```sh
 .venv/bin/tennis-ai analyze path/to/video.mp4 --output outputs/my-match --players 4
 .venv/bin/tennis-ai analyze path/to/video.mp4 --output outputs/custom-match --ball-bundle models/ball-bundle
+.venv/bin/tennis-ai resume outputs/my-match
 .venv/bin/tennis-ai render outputs/my-match
+.venv/bin/tennis-ai package outputs/my-match outputs/portable-match
+.venv/bin/tennis-ai clip outputs/my-match --start 10 --end 18 --output outputs/rally.mp4
+.venv/bin/tennis-ai benchmark benchmark.json --split test --output outputs/metrics.json
 .venv/bin/tennis-ai evaluate outputs/my-match/frames.jsonl annotations.jsonl --output metrics.json
 ```
 
@@ -76,6 +98,8 @@ An analysis folder contains:
 
 | File | Purpose |
 |---|---|
+| `manifest.json` | Version 2 relative paths, source hash, media coordinates and model provenance |
+| `events.json` | Candidate and reviewed hit, bounce and rally events |
 | `annotated.mp4` | Timestamped H.264 replay with source audio encoded to AAC |
 | `frames.jsonl` | Final per-frame detections, court, pose, player labels and ball status |
 | `summary.json` | Settings, versions, status, runtime, observed/interpolated ball coverage and court availability |
@@ -83,7 +107,9 @@ An analysis folder contains:
 | `review.sqlite` | Indexed corrected records for exact-frame review |
 | `corrections.json` | Optional per-frame court correction and per-scene player labels |
 
-The original video must remain at its recorded location. Re-export verifies its SHA-256 before using predictions. A completed export is replaced only after the new render finishes. Cancelled inference leaves a partial cache for diagnosis; start a new analysis folder to retry. Resuming local inference is not implemented.
+New analyses copy the original video into their folder; moving the entire folder preserves access. Legacy runs with external media can be converted with `package` while their source is still available. Re-export verifies the source SHA-256. Resume validates source, settings, model weights, code and runtime versions, then restores predictions and tracker state from the last committed checkpoint; up to 29 uncommitted frames may be recomputed. A changed analysis environment requires a new run.
+
+Use **Saved analyses** to reopen completed runs or resume a paused job. Under event review, inspect candidates, correct times/types/player IDs, mark reviewed events, exclude false detections and export a selected interval with audio. Only reviewed, non-excluded events enter verified statistics; automatic candidates remain a separate count. Ball annotations distinguish a confirmed absence from an unlabelled frame. See [annotation and benchmark instructions](docs/ANNOTATION.md).
 
 ## Google Colab
 
@@ -112,7 +138,7 @@ uv build --wheel --out-dir colab_delivery
 - **Ball:** pretrained sports-ball class until a custom single-class YOLO26s bundle is selected. A motion/position gate chooses one ball; stationary spare balls and tiny far-court balls remain difficult.
 - **Court:** 14 keypoints from the original 15-channel heatmap model, RANSAC geometry fit, recalibration at least once per second and after camera movement/cuts. Manual geometry is available when the model cannot fit.
 - **Ball gaps:** only gaps bounded by observations within 100 ms, within one scene, are interpolated. Hollow yellow dots mean inferred points; unknown intervals are never joined.
-- **Miniature court:** ground-contact estimates from ankles or box bottoms. An airborne ball is not projected as a landing point. No bounce detection, stroke classification, scoring, measured ball speed or coaching diagnosis is claimed.
+- **Miniature court:** ground-contact estimates from ankles or box bottoms. An airborne ball is not projected as a landing point. Heuristic direction changes generate bounce/contact candidates, without verified accuracy. Five stroke labels can be assigned manually; automatic strokes remain `unknown`. Only confirmed ground-contact locations appear in landing statistics. Scoring, measured ball speed and coaching diagnosis are not implemented.
 - **Video:** each decoded frame is processed, source presentation timestamps are normalized to start at zero and preserved to 1/90,000 second resolution in output. Audio is re-encoded, not bit-identical. Original orientation should be baked into pixels; rotated phone video is handled as described in the validation report. Full-court views are the target; cut detection is heuristic and can miss dissolves or rapid pans.
 
 ## Accuracy evaluation

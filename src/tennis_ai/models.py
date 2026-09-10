@@ -81,6 +81,24 @@ class Models:
     def reset(self):
         self.tracker.reset()
 
+    def snapshot(self):
+        from tennis_ai.jobs import snapshot_tracker
+
+        return {
+            "tracker": snapshot_tracker(self.tracker),
+            "device": self.device,
+            "warnings": self.warnings,
+        }
+
+    def restore(self, state):
+        from tennis_ai.jobs import restore_tracker
+
+        restore_tracker(self.tracker, state["tracker"])
+        self.device = choose_device(state["device"])
+        self.warnings = state["warnings"]
+        if self.court is not None:
+            self.court.to(self.device)
+
     def predict(self, model, frame, **kwargs):
         try:
             return model.predict(frame, device=self.device, verbose=False, **kwargs)[0]

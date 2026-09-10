@@ -1,0 +1,5 @@
+"model.missing" = "未安装离线检测模型。请在构建资源中加入配套 ModelManifest.json 与 Detector.mlpackage 后重新构建；已有分析文件仍可复盘。";
+"model.incompatible" = "模型输出与离线契约不匹配，请使用项目导出工具重新生成。";
+"import.duration" = "请选择时长不超过两小时的有效视频。";
+"import.videoMissing" = "文件中没有视频轨道。";
+"storage.low" = "本机可用存储不足，请清理空间后继续。";

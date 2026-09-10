@@ -1,0 +1,12 @@
+{
+  "reviewer": "testing",
+  "findings": [],
+  "residual_risks": [
+    "Native thermal-state pausing remains outside deterministic simulator coverage."
+  ],
+  "testing_gaps": [
+    "Desktop create_app job lifecycle lacks behavioral integration coverage for start/poll/cancel/resume, worker-lock release, and terminal status presentation.",
+    "Native AnalysisEngine pause/resume is not tested end to end; the smoke harness only runs uninterrupted analysis and manually changes manifest status for package-import rejection.",
+    "Python and iOS clip exporters lack failure/cancellation cleanup tests proving partial output removal."
+  ]
+}

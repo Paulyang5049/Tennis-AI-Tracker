@@ -1,0 +1,5 @@
+"model.missing" = "Offline model missing. Add matching ModelManifest.json and Detector.mlpackage to the build resources and rebuild. Existing analysis packages remain reviewable.";
+"model.incompatible" = "Model output does not match the supported offline contract.";
+"import.duration" = "Choose a valid video up to two hours long.";
+"import.videoMissing" = "The file contains no video track.";
+"storage.low" = "Insufficient local storage. Free space before continuing.";

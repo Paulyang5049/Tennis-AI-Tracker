@@ -1,0 +1,72 @@
+{
+  "reviewer": "swift-ios",
+  "findings": [
+    {
+      "title": "Imported partial analyses are marked complete",
+      "severity": "P1",
+      "file": "ios/TennisApp/Library.swift",
+      "line": 91,
+      "why_it_matters": "A paused, cancelled, failed, or otherwise partial v2 package is converted to a completed local analysis during import. The analysis engine then returns immediately for that match, so users cannot continue or regenerate the missing frames; an unanalysed package with empty model provenance can additionally become incompatible as soon as the bundled detector is selected. Preserve the package state and either reconstruct a resumable RuntimeState from imported frames or deliberately restart incomplete imports from frame zero with a matching resume identity.",
+      "autofix_class": "manual",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "suggested_fix": "Branch on manifest.status during import: retain imported results as complete only when the package is actually complete; for incomplete packages, either rebuild and checkpoint the full tracker/temporal RuntimeState from the imported frames or initialize a fresh zero-frame store and rerun inference from the contained source. Keep the stored status and ResumeIdentity consistent with the chosen path.",
+      "confidence": 100,
+      "evidence": [
+        "ios/TennisApp/Library.swift:91 -- try store.setStatus(.complete)",
+        "ios/TennisApp/AnalysisEngine.swift:17 -- if try store.status() == .complete { return }",
+        "ios/Sources/TennisCore/AnalysisStore.swift:152 -- if batch.count>=120 { try checkpoint(frames:batch,events:[],state:current,status:.complete); batch=[] }",
+        "contracts/README.md:38 -- Status: running, paused, cancelled, failed, inference_complete, complete."
+      ],
+      "pre_existing": false
+    },
+    {
+      "title": "Package import blocks the main actor",
+      "severity": "P1",
+      "file": "ios/TennisApp/TennisApp.swift",
+      "line": 35,
+      "why_it_matters": "Importing a large analysis folder can freeze the entire interface while it copies the source video, hashes it, decodes every JSONL frame, and populates SQLite. The import is invoked synchronously from a SwiftUI task, so the progress overlay cannot remain responsive and a multi-gigabyte package can be terminated by the watchdog. Move the synchronous package pipeline to a non-main executor and publish only the final state transition on the main actor.",
+      "autofix_class": "gated_auto",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "suggested_fix": "Make package import asynchronous and run LocalLibrary.importPackage in a detached or dedicated actor task with explicit cancellation checks; await its result before calling the main-actor reload and error-state updates.",
+      "confidence": 75,
+      "evidence": [
+        "ios/TennisApp/TennisApp.swift:35 -- Task { do { if package { _=try LocalLibrary.importPackage(url) } else { _=try await LocalLibrary.importVideo(url,players:players) }; try reload() } catch { self.error=error.localizedDescription }; busy=false }",
+        "ios/TennisApp/Library.swift:73 -- if FileManager.default.fileExists(atPath:input.path) { try FileManager.default.copyItem(at:input,to:target) }",
+        "ios/TennisApp/Library.swift:76 -- guard try hash(PackageIO.asset(manifest.media.path,in:folder))==manifest.media.sha256 else { throw PackageError.invalid(\"Package video checksum does not match manifest\") }",
+        "ios/TennisApp/Library.swift:82 -- if FileManager.default.fileExists(atPath:frames.path) { try store.importFrames(from:frames) }"
+      ],
+      "pre_existing": false
+    },
+    {
+      "title": "Failed event saves still dismiss editor",
+      "severity": "P2",
+      "file": "ios/TennisApp/EventEditor.swift",
+      "line": 40,
+      "why_it_matters": "A SQLite or refresh failure discards the user's in-progress event form because the editor dismisses even though persistence failed. The parent records an alert after swallowing the error, but the edited values are already gone and must be re-entered. Let the save callback throw and dismiss only after persistence and refresh both succeed.",
+      "autofix_class": "gated_auto",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "suggested_fix": "Change save to `(AnalysisEvent) throws -> Void`, call it with `try save(event)`, and have ReviewView's sheet closure perform store.saveEvent and refresh without the non-throwing perform wrapper so EventEditor keeps the sheet open and renders its local error on failure.",
+      "confidence": 75,
+      "evidence": [
+        "ios/TennisApp/EventEditor.swift:40 -- try event.validate(duration:duration); save(event); dismiss()",
+        "ios/TennisApp/TennisApp.swift:126 -- .sheet(item:$editing) { event in EventEditor(event:event,duration:item.manifest.media.duration) { updated in perform { guard let store else { throw PackageError.invalid(\"请先开始分析以建立记录\") }; try store.saveEvent(updated,duration:item.manifest.media.duration); try refresh() } } }",
+        "ios/TennisApp/TennisApp.swift:129 -- func perform(_ action:()throws->Void) { do { try action() } catch { self.error=error.localizedDescription } }"
+      ],
+      "pre_existing": false
+    }
+  ],
+  "residual_risks": [
+    "The app target uses Swift 5 language mode, so strict-concurrency diagnostics do not currently prove all AVFoundation, Core ML, and SwiftUI crossings are Sendable-safe.",
+    "Model tensor interpretation and preferred-transform coordinate mapping still require validation with the exact shipped mlpackage and rotated real-device footage.",
+    "The simulator smoke harness verifies one short H.264/AAC clip, but audio retention and clip-boundary synchronization remain unverified for the broader source codecs, nonzero timelines, and variable-frame-rate media accepted by the importer."
+  ],
+  "testing_gaps": [
+    "No test imports packages in each non-complete status and then verifies a correct continue-or-restart path with tracker and temporal-event state preserved.",
+    "No UI-level failure injection verifies that event editor content remains presented when SQLite persistence or refresh fails.",
+    "No responsiveness or cancellation test covers importing a large package while SwiftUI remains interactive.",
+    "The simulator harness exercises the native AVFoundation/Core ML import-analysis-replay-export path locally, but the GitHub workflow only compiles the app and never runs that harness, so these runtime assertions are not a CI regression guard."
+  ]
+}

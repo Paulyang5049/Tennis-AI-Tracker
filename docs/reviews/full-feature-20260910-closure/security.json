@@ -1,0 +1,22 @@
+{
+  "reviewer": "security",
+  "findings": [
+    {
+      "title": "CWE-20: Imported duration can permanently crash library",
+      "severity": "P1",
+      "file": "ios/TennisApp/TennisApp.swift",
+      "line": 24,
+      "confidence": 100,
+      "autofix_class": "gated_auto",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "pre_existing": false,
+      "suggested_fix": "Replace the trapping Int conversion with finite Double formatting or Int(exactly: duration.rounded(.towardZero)) plus fallback. A completed package with duration 1e100 currently passes validation, persists successfully, then crashes library rendering on every launch. Add an import/reload regression for this package.",
+      "first_evidence": "ios/TennisApp/TennisApp.swift:24 -- VStack(alignment:.leading) { Text(item.title); Text(\"\\(Int(item.manifest.media.duration)) 秒 · \\(ByteCountFormatter.string(fromByteCount:LocalLibrary.diskUsage(item),countStyle:.file))\").font(.caption) }"
+    }
+  ],
+  "residual_risks": [],
+  "testing_gaps": [
+    "Review was static; the malformed-duration package was not imported into a running iOS application."
+  ]
+}

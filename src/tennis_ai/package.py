@@ -1,6 +1,7 @@
 """Portable AnalysisPackage v2; v1 runs remain readable without migration."""
 
 import json
+import math
 import os
 import shutil
 import tempfile
@@ -63,6 +64,12 @@ def write_manifest(folder, source, metadata, settings, model_provenance, status=
         },
     }
     atomic_json(folder / "manifest.json", manifest)
+    for name, value in (
+        ("events.json", {"schema_version": 2, "events": []}),
+        ("corrections.json", {"court": {}, "labels": {}}),
+    ):
+        if not (folder / name).exists():
+            atomic_json(folder / name, value)
     return manifest
 
 
@@ -73,6 +80,20 @@ def load_manifest(folder):
         manifest = json.loads(path.read_text())
         if manifest.get("schema_version") != 2:
             raise ValueError("Unsupported analysis package version")
+        media = manifest["media"]
+        if (
+            manifest["settings"].get("players") not in (2, 4)
+            or manifest.get("coordinate_system") != "oriented_pixels_top_left"
+            or any(
+                not isinstance(media.get(key), (int, float))
+                or isinstance(media[key], bool)
+                or not math.isfinite(media[key])
+                or media[key] <= 0
+                for key in ("width", "height", "duration")
+            )
+            or not math.isfinite(media.get("origin", 0))
+        ):
+            raise ValueError("Invalid package media, settings or coordinates")
         relative_asset(folder, manifest["media"]["path"])
         for name in manifest["artifacts"].values():
             relative_asset(folder, name)
@@ -110,3 +131,65 @@ def update_status(folder, status):
         manifest = load_manifest(folder)
         manifest["status"] = status
         atomic_json(path, manifest)
+
+
+def export_package(folder, destination):
+    """Copy a completed legacy/current run into a self-contained directory."""
+    from tennis_ai.jobs import run_lock
+
+    folder, destination = Path(folder).resolve(), Path(destination).resolve()
+    if destination.exists():
+        raise ValueError("Package destination already exists")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with (
+        run_lock(folder),
+        tempfile.TemporaryDirectory(dir=destination.parent, prefix=".package-") as staging,
+    ):
+        summary = json.loads((folder / "summary.json").read_text())
+        if summary["status"] != "complete":
+            raise ValueError("Only completed runs can be exported")
+        manifest = load_manifest(folder) if (folder / "manifest.json").exists() else None
+        source = (
+            relative_asset(folder, manifest["media"]["path"])
+            if manifest
+            else Path(summary["source"])
+        )
+        if sha256(source) != summary["source_sha256"]:
+            raise ValueError("Source changed; predictions cannot be exported")
+        temporary = Path(staging) / "analysis"
+        copied = write_manifest(
+            temporary,
+            source,
+            summary["video"],
+            summary["settings"],
+            manifest["model_provenance"] if manifest else summary.get("versions", {}),
+            status="complete",
+        )
+        if copied["media"]["sha256"] != summary["source_sha256"]:
+            raise ValueError("Source changed during package copy")
+        for name in (
+            "frames.jsonl",
+            "events.json",
+            "corrections.json",
+            "annotated.mp4",
+            "review.sqlite",
+            "cache.sqlite",
+            "annotations.jsonl",
+            "event_annotations.json",
+        ):
+            if (folder / name).is_file():
+                shutil.copy2(folder / name, temporary / name)
+        if not (folder / "events.json").exists():
+            from tennis_ai.events import regenerate_events
+
+            regenerate_events(
+                temporary / "frames.jsonl",
+                temporary / "events.json",
+                temporary / "corrections.json",
+            )
+        summary["source"] = str(destination / copied["media"]["path"])
+        atomic_json(temporary / "summary.json", summary)
+        if destination.exists():
+            raise ValueError("Package destination already exists")
+        temporary.replace(destination)
+    return destination

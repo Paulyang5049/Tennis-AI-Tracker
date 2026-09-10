@@ -1,0 +1,55 @@
+{
+  "status": "complete",
+  "verdict": "Ready to merge",
+  "scope": {
+    "base": "e565b14",
+    "branch": "feat/offline-ios-foundation",
+    "head_sha": "9f3925e4cce675a1b0ee3e91209cdf903bec6e1a",
+    "pr_url": null,
+    "files_changed": 69
+  },
+  "intent": "Offline desktop and native iOS development workflow; excludes release and unmeasured model accuracy.",
+  "intent_confidence": "inferred",
+  "reviewers": [
+    "correctness",
+    "swift-ios",
+    "security",
+    "adversarial",
+    "testing",
+    "maintainability",
+    "reliability",
+    "performance",
+    "api-contract"
+  ],
+  "findings": [],
+  "actionable_findings": [],
+  "triage_groups": [],
+  "pre_existing_findings": [],
+  "requirements_completeness": null,
+  "learnings": [],
+  "agent_native_gaps": [],
+  "deployment_notes": [
+    "Development branch only; no signed physical device or App Store release."
+  ],
+  "residual_risks": [
+    "Native resume decodes from media origin to preserve VFR frame identity. Long-GOP seek optimization is deferred until equivalent results are demonstrated.",
+    "Native correction refresh occurs every 60-frame checkpoint.",
+    "Ball false positives are visible on supplied broadcast score graphics; automatic events require manual verification."
+  ],
+  "testing_gaps": [
+    "Physical device heat, battery, memory, two-hour runs and tap-by-tap SwiftUI import workflow are unverified.",
+    "Model accuracy and Core ML parity require independent labels.",
+    "Injected native export I/O failure recovery has not been exercised."
+  ],
+  "coverage": {
+    "local_lenses": "Nine genuine reviewer returns preserved.",
+    "validator": "One independent batch returned 12 verdicts in validator.json.",
+    "cross_model": "Not run; internal adversarial fallback used.",
+    "coordinator": "Hit account limit after validator artifact; root completed synthesis and post-fix verification.",
+    "post_fix": "12 Swift tests and native 179-frame real-video integration pass; previous Python 72 tests and lint/type checks pass.",
+    "resolved": "Import completeness, duration trap, frame-index court scope, point clips, off-main import, bounce-only position and edit failure persistence independently closed. Root fixed pose/racket round-trip, reviewed-only statistics and per-frame correction decoding; tests/native smoke passed.",
+    "rejected": "Completion-before-export candidate rejected: outer catch persists failed state and permits retry."
+  },
+  "artifact_path": "/Users/pauly/Developer/AI_tennis/docs/reviews/full-feature-20260910-closure",
+  "run_id": "full-feature-20260910-closure"
+}

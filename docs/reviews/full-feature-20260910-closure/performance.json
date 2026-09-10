@@ -1,0 +1,48 @@
+{
+  "reviewer": "performance",
+  "findings": [
+    {
+      "title": "Resume decodes every previously completed frame",
+      "severity": "P2",
+      "file": "ios/TennisApp/AnalysisEngine.swift",
+      "line": 24,
+      "why_it_matters": "Resuming near the end of a long match starts AVAssetReader at the original media origin and decodes the entire completed prefix again, discarding each frame before inference. For the supported two-hour videos, repeated pauses can impose a large and growing restart delay and unnecessary decode energy. Starting the reader near the last committed timestamp while retaining the strict timestamp skip restores only the required GOP prefix and keeps VFR safety.",
+      "autofix_class": "gated_auto",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "suggested_fix": "When state.nextFrame is nonzero, set AVAssetReader.timeRange to begin at or just before state.lastTimestamp plus manifest.media.origin, allowing AVFoundation to decode the needed keyframe prefix, and keep the time > state.lastTimestamp guard. Verify resumed output against uninterrupted VFR and long-GOP fixtures.",
+      "confidence": 100,
+      "evidence": [
+        "ios/TennisApp/AnalysisEngine.swift:24 -- reader.timeRange=CMTimeRange(start:CMTime(seconds:manifest.media.origin,preferredTimescale:60000),duration:CMTime(seconds:manifest.media.duration,preferredTimescale:60000))",
+        "ios/TennisApp/AnalysisEngine.swift:46 -- guard time.isFinite,time>=0,time>state.lastTimestamp else { return }",
+        "ios/README.md:38 -- 为保持可变帧率 PTS 的精确恢复，当前恢复从视频起始解码并跳过已提交时间；跳过部分不执行模型推理。长片恢复会花时间，尚未实现 GOP 随机定位加速。"
+      ],
+      "pre_existing": false
+    },
+    {
+      "title": "Court corrections are decoded for every frame",
+      "severity": "P2",
+      "file": "ios/TennisApp/AnalysisEngine.swift",
+      "line": 57,
+      "why_it_matters": "Every analyzed frame performs a SQLite metadata query and JSON-decodes the complete corrections object. A two-hour 30 fps match invokes this path about 216,000 times, and the decoded dictionary grows as calibrations and labels are added. Caching corrections outside the frame loop removes this avoidable database and allocation work from the inference hot path.",
+      "autofix_class": "gated_auto",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "suggested_fix": "Load Corrections once before the decode loop and use the cached value for latestCourt lookups; if live edits during analysis must take effect, refresh the cache only at the existing 60-frame checkpoint boundary or version metadata so it reloads only after a change.",
+      "confidence": 100,
+      "evidence": [
+        "ios/TennisApp/AnalysisEngine.swift:57 -- frame.court=try store.corrections().latestCourt(at:frame.frame)",
+        "ios/Sources/TennisCore/AnalysisStore.swift:55 -- public func corrections()throws->Corrections { try synchronized { try metadata(\"corrections\") ?? Corrections() } }",
+        "ios/Sources/TennisCore/AnalysisStore.swift:43 -- return try ContractJSON.decoder().decode(T.self,from:rowData(s,column:0))"
+      ],
+      "pre_existing": false
+    }
+  ],
+  "residual_risks": [
+    "Native long-match decode speed, peak memory, thermal behavior, and energy use remain unmeasured on a signed physical device."
+  ],
+  "testing_gaps": [
+    "No long-GOP or near-end resume benchmark demonstrates that restart latency stays bounded for the supported two-hour duration.",
+    "No profiling result quantifies per-frame SQLite/JSON correction lookup cost during sustained native inference."
+  ]
+}

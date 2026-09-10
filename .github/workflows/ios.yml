@@ -1,0 +1,27 @@
+name: iOS core and app
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Test shared data and analysis core
+        run: swift test --package-path ios
+      - name: Generate native project
+        run: python3 ios/generate_project.py
+      - name: Compile simulator app without signing
+        run: >-
+          xcodebuild -project ios/TennisOffline.xcodeproj
+          -scheme TennisOffline -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath ios/DerivedData
+          CODE_SIGNING_ALLOWED=NO build

@@ -8,7 +8,9 @@ import av
 import cv2
 
 from tennis_ai.geometry import calibrate
-from tennis_ai.pipeline import connect, corrected_records, rows
+from tennis_ai.jobs import run_lock
+from tennis_ai.package import atomic_json
+from tennis_ai.pipeline import connect, corrected_records, load_summary, rows
 from tennis_ai.render import Renderer
 from tennis_ai.tracking import interpolate
 from tennis_ai.video import oriented_image
@@ -16,7 +18,7 @@ from tennis_ai.video import oriented_image
 
 def preview(folder, index, overlays=None):
     folder = Path(folder)
-    summary = json.loads((folder / "summary.json").read_text())
+    summary = load_summary(folder)
     index = max(0, min(int(index), summary["frames"] - 1))
     with sqlite3.connect(folder / "review.sqlite") as conn:
         row = conn.execute("SELECT time, data FROM frames WHERE idx=?", (index,)).fetchone()
@@ -57,8 +59,13 @@ def preview(folder, index, overlays=None):
 
 
 def save_correction(folder, frame, corners=None, labels=None):
+    with run_lock(folder):
+        return _save_correction(folder, frame, corners, labels)
+
+
+def _save_correction(folder, frame, corners=None, labels=None):
     folder = Path(folder)
-    summary = json.loads((folder / "summary.json").read_text())
+    summary = load_summary(folder)
     metadata = summary["video"]
     path = folder / "corrections.json"
     corrections = json.loads(path.read_text()) if path.exists() else {"court": {}, "labels": {}}
@@ -80,7 +87,7 @@ def save_correction(folder, frame, corners=None, labels=None):
         ):
             raise ValueError('Labels must be an object such as {"1": "Paul", "2": "Opponent"}')
         corrections.setdefault("labels", {})[str(record["scene"])] = labels
-    path.write_text(json.dumps(corrections, indent=2))
+    atomic_json(path, corrections)
     # Update review metadata immediately without running a model or re-encoding video.
     with connect(folder) as source, sqlite3.connect(folder / "review.sqlite") as target:
         for corrected in corrected_records(
