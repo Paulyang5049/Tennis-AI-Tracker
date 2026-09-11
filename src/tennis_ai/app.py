@@ -372,7 +372,7 @@ def create_app(root):
         gr.HTML(HERO)
         job_state, folder_state, corners_state = gr.State(), gr.State(), gr.State([])
         activity = gr.HTML(progress_card(), elem_id="activity")
-        status = gr.Textbox(label="Progress", interactive=False, visible=False)
+        status: Any = gr.Textbox(label="Progress", interactive=False, visible=False)
         detail = gr.JSON(label="Frame detections", render=False)
         summary = gr.JSON(label="Run details and coverage (not accuracy)", render=False)
         with gr.Tabs(elem_id="workspace-tabs"):
@@ -465,7 +465,7 @@ def create_app(root):
                         "leave them empty when uncertain. Favorites and excluded events remain editable."
                     )
                     reload_events: Any = gr.Button("Load events and statistics")
-                    event_selector = gr.Dropdown(
+                    event_selector: Any = gr.Dropdown(
                         choices=[("New manual event", "new")], value="new", label="Event"
                     )
                     event_stats = gr.Markdown()
@@ -542,7 +542,7 @@ def create_app(root):
                     )
                     load_label: Any = gr.Button("Load current frame for annotation")
                     label_context = gr.State()
-                    label_image = gr.Image(
+                    label_image: Any = gr.Image(
                         label="Click ball centre", type="numpy", interactive=False
                     )
                     with gr.Row():
