@@ -2,6 +2,7 @@
 
 import json
 import math
+import re
 import sqlite3
 import tempfile
 from collections import defaultdict
@@ -10,6 +11,7 @@ from typing import Any
 
 import numpy as np
 
+from tennis_ai.artifacts import sha256
 from tennis_ai.events import KINDS, STROKES, new_event
 from tennis_ai.geometry import iou
 from tennis_ai.package import relative_asset
@@ -35,6 +37,7 @@ def load_manifest(path):
         raise ValueError("Expected benchmark manifest schema_version=1 and clips list")
     ids, sources = set(), set()
     match_splits: dict[str, str] = {}
+    content_splits: dict[str, str] = {}
     clips = []
     for raw in document["clips"]:
         row = dict(raw)
@@ -71,6 +74,18 @@ def load_manifest(path):
                 "Duplicate clip source path; export distinct clips with shared match_id"
             )
         sources.add(row["source"])
+        digest = sha256(row["source"])
+        if "source_sha256" in row:
+            declared = row["source_sha256"]
+            if (
+                not isinstance(declared, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", declared)
+                or declared != digest
+            ):
+                raise ValueError("source_sha256 must match the source file")
+        row["source_sha256"] = digest
+        if content_splits.setdefault(digest, row["split"]) != row["split"]:
+            raise ValueError("Source content alias leaks across splits")
         for key in ("width", "height", "duration"):
             _number(row.get(key), key, positive=True)
         conditions = row.get("conditions", [])
@@ -473,6 +488,43 @@ def _gate(category, clips, metrics, split):
     }
 
 
+def ball_confidence_intervals(clips, resamples=2000, seed=0):
+    """Percentile intervals with original matches, not correlated frames, resampled."""
+    matches: dict[str, list[int]] = {}
+    for clip in clips:
+        counts = matches.setdefault(clip["match_id"], [0, 0, 0])
+        for i, key in enumerate(("tp", "fp", "fn")):
+            counts[i] += clip["frames"][key]
+    count = len(matches)
+    values: dict[str, list[float]] = {"precision": [], "recall": []}
+    if count >= 2:
+        data = np.array([matches[key] for key in sorted(matches)])
+        rng = np.random.default_rng(seed)
+        for _ in range(resamples):
+            tp, fp, fn = data[rng.integers(0, count, count)].sum(axis=0)
+            for metric, denominator in (("precision", tp + fp), ("recall", tp + fn)):
+                if denominator:
+                    values[metric].append(float(tp / denominator))
+    return {
+        "unit": "match",
+        "independent_matches": count,
+        "seed": seed,
+        "resamples": resamples,
+        "level": 0.95,
+        **{
+            metric: {
+                "status": "insufficient_matches"
+                if count < 2
+                else ("ok" if samples else "undefined_denominator"),
+                "lower": float(np.percentile(samples, 2.5)) if samples else None,
+                "upper": float(np.percentile(samples, 97.5)) if samples else None,
+                "valid_resamples": len(samples),
+            }
+            for metric, samples in values.items()
+        },
+    }
+
+
 def evaluate_manifest(path, split="test"):
     manifest = load_manifest(path)
     if split not in ("train", "val", "test"):
@@ -498,6 +550,10 @@ def evaluate_manifest(path, split="test"):
         category: _aggregate([clip for clip in clips if clip["category"] == category])
         for category in categories
     }
+    for category, metrics in grouped.items():
+        metrics["frames"]["confidence_intervals"] = ball_confidence_intervals(
+            [clip for clip in clips if clip["category"] == category]
+        )
     gates = {
         category: _gate(
             category,

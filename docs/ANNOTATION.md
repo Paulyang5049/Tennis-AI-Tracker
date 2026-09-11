@@ -82,6 +82,20 @@ favoriting a candidate does not verify it.
 
 ## Gates and contribution
 
+The upgrade protocol is [EVALUATION_PROTOCOL.md](EVALUATION_PROTOCOL.md). A clip may declare
+`source_sha256`; if present it must match the source bytes. The loader also hashes source
+bytes to reject renamed duplicates across splits. Reports add deterministic match-cluster
+bootstrap intervals for ball precision/recall; clips of one match form one cluster.
+These intervals do not replace the explicit original-match provenance for crops/transcodes.
+
+For the v3 upgrade, annotate contact as an interval with a persistent participant identity,
+stroke (or unknown), image contact point and optional calibrated player ground point.
+Record scene-local near/far assignments separately from participant identity across changes
+of ends. Record observed bounce and shot-to-bounce association separately. Unobserved contact
+or landing coordinates stay null. Independently double-label pilot intervals, adjudicate
+differences and retain both initial labels plus the adjudication. Optional point outcome,
+server and score labels must not be inferred merely from a shot sequence.
+
 The phone gate needs at least five original held-out matches **per setting**,
 positive and negative ball frames, near/far positives and all declared conditions.
 Current gates require ball precision/recall >= 90%/75%, hit/bounce F1 >= 85%, rally

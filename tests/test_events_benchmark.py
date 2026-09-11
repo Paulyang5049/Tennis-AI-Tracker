@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -342,3 +343,82 @@ def test_disk_frame_index_rejects_duplicate_ids(tmp_path):
     pred = write_lines(tmp_path / "pred.jsonl", [frame(1, None), frame(1, None)])
     with pytest.raises(ValueError, match="Duplicate"):
         evaluate_frames(pred, gt)
+
+
+@pytest.mark.parametrize("declared", [None, "bad", "0" * 64, 123])
+def test_declared_source_sha256_must_be_valid_and_match(tmp_path, declared):
+    row = clip(tmp_path, source_sha256=declared)
+    path = write_json(tmp_path / "manifest.json", {"schema_version": 1, "clips": [row]})
+    with pytest.raises(ValueError, match="source_sha256"):
+        load_manifest(path)
+
+
+def test_source_checksum_optional_and_valid_digest_accepted(tmp_path):
+    row = clip(tmp_path)
+    path = write_json(tmp_path / "manifest.json", {"schema_version": 1, "clips": [row]})
+    assert len(load_manifest(path)["clips"]) == 1
+    row["source_sha256"] = hashlib.sha256((tmp_path / row["source"]).read_bytes()).hexdigest()
+    write_json(path, {"schema_version": 1, "clips": [row]})
+    assert load_manifest(path)["clips"][0]["source_sha256"] == row["source_sha256"]
+
+
+@pytest.mark.parametrize("declared", [False, True])
+def test_content_alias_across_splits_rejected_even_with_different_match_ids(tmp_path, declared):
+    rows = [clip(tmp_path, "a"), clip(tmp_path, "b", split="train")]
+    if declared:
+        for row in rows:
+            row["source_sha256"] = hashlib.sha256(
+                (tmp_path / row["source"]).read_bytes()
+            ).hexdigest()
+    path = write_json(tmp_path / "manifest.json", {"schema_version": 1, "clips": rows})
+    with pytest.raises(ValueError, match="content.*leaks"):
+        evaluate_manifest(path)
+
+
+def test_ball_bootstrap_resamples_matches_not_clips_and_is_reproducible(tmp_path):
+    rows = [clip(tmp_path, "a"), clip(tmp_path, "b", match_id="a"), clip(tmp_path, "c")]
+    write_lines(tmp_path / "c-pred.jsonl", [frame(0, [100, 100])])
+    path = write_json(tmp_path / "manifest.json", {"schema_version": 1, "clips": rows})
+    report = evaluate_manifest(path)
+    result = report["categories"]["phone-singles"]["frames"]
+    ci = result["confidence_intervals"]
+    assert result["precision"] == pytest.approx(2 / 3)
+    assert ci["unit"] == "match"
+    assert ci["independent_matches"] == 2
+    assert ci["seed"] == 0
+    assert ci["resamples"] == 2000
+    for metric in ("precision", "recall"):
+        assert ci[metric]["status"] == "ok"
+        assert ci[metric]["lower"] == 0
+        assert ci[metric]["upper"] == 1
+    write_json(path, {"schema_version": 1, "clips": rows[::-1]})
+    assert evaluate_manifest(path)["categories"]["phone-singles"]["frames"] == result
+    # Combining two clips into one must leave the cluster distribution unchanged.
+    write_lines(tmp_path / "a-gt.jsonl", [{"frame": i, "ball": [10, 10]} for i in range(2)])
+    write_lines(tmp_path / "a-pred.jsonl", [frame(i, [10, 10]) for i in range(2)])
+    write_json(path, {"schema_version": 1, "clips": [rows[0], rows[2]]})
+    assert evaluate_manifest(path)["categories"]["phone-singles"]["frames"] == result
+
+
+@pytest.mark.parametrize("count", [0, 1])
+def test_ball_bootstrap_reports_insufficient_matches(tmp_path, count):
+    rows = [clip(tmp_path, str(i), match_id="same") for i in range(count * 3)]
+    path = write_json(tmp_path / "manifest.json", {"schema_version": 1, "clips": rows})
+    ci = evaluate_manifest(path)["categories"]["phone-singles"]["frames"]["confidence_intervals"]
+    assert ci["independent_matches"] == count
+    for metric in ("precision", "recall"):
+        assert ci[metric]["status"] == "insufficient_matches"
+        assert ci[metric]["lower"] is None
+        assert ci[metric]["upper"] is None
+
+
+def test_ball_bootstrap_reports_undefined_denominators(tmp_path):
+    rows = [clip(tmp_path, str(i)) for i in range(2)]
+    for row in rows:
+        write_lines(tmp_path / row["predictions"], [frame(0, None)])
+    path = write_json(tmp_path / "manifest.json", {"schema_version": 1, "clips": rows})
+    ci = evaluate_manifest(path)["categories"]["phone-singles"]["frames"]["confidence_intervals"]
+    assert ci["precision"]["status"] == "undefined_denominator"
+    assert ci["precision"]["lower"] is None
+    assert ci["precision"]["valid_resamples"] == 0
+    assert ci["recall"]["lower"] == ci["recall"]["upper"] == 0

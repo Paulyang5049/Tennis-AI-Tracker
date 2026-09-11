@@ -16,6 +16,7 @@ runs/
 !outputs/.gitkeep
 .DS_Store
 .env
+.context/
 
 # Native build outputs and isolated model-conversion artifacts
 ios/.build/
