@@ -27,7 +27,7 @@ bootstrap = [
     code("""from google.colab import files, drive
 from pathlib import Path
 import subprocess, sys
-WHEEL = 'https://github.com/Paulyang5049/tennis-ai-local/releases/download/v0.2.0/tennis_ai_local-0.2.0-py3-none-any.whl'
+WHEEL = 'https://github.com/Paulyang5049/Tennis-AI-Tracker/releases/download/v0.2.0/tennis_ai_local-0.2.0-py3-none-any.whl'
 subprocess.run([sys.executable, '-m', 'pip', 'install', WHEEL], check=True)
 print('If pip replaced an already imported torch/numpy, restart the session before continuing.')"""),
     code("""import torch, importlib.metadata

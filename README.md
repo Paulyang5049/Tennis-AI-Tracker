@@ -2,9 +2,9 @@
 
 ![Tennis AI: Your match. Your memories. On your machine.](docs/images/hero.svg)
 
-[![Tests](https://github.com/Paulyang5049/tennis-ai-local/actions/workflows/test.yml/badge.svg)](https://github.com/Paulyang5049/tennis-ai-local/actions/workflows/test.yml)
+[![Tests](https://github.com/Paulyang5049/Tennis-AI-Tracker/actions/workflows/test.yml/badge.svg)](https://github.com/Paulyang5049/Tennis-AI-Tracker/actions/workflows/test.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-[![Open Ball Training in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Paulyang5049/tennis-ai-local/blob/main/notebooks/01_train_ball_yolo26.ipynb)
+[![Open Ball Training in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Paulyang5049/Tennis-AI-Tracker/blob/main/notebooks/01_train_ball_yolo26.ipynb)
 
 Record the rallies. Revisit the details. Keep your videos private.
 
@@ -12,15 +12,47 @@ Tennis AI Local is an open-source desktop app for analyzing and replaying full-c
 
 ## A look inside
 
-![Current desktop application: upload, analysis controls and side-by-side replay areas](docs/images/desktop.png)
-
-*Actual screenshot of the published desktop app in its empty state. No detection results or accuracy figures are simulated. The banner is an original illustration.*
-
 ![Development preview: court-green and tennis-yellow desktop interface with match library, review, events and settings tabs](docs/images/desktop-preview.png)
 
-*Actual running development preview in its empty state. This redesigned interface is not yet included in the main-branch installation; the published interface is shown in the first screenshot. No match results are simulated.*
+*Actual running development preview in its empty state. This redesigned interface is not yet included in the main-branch installation. No match results are simulated.*
 
 ![Workflow: import a recording, analyze locally, review exact frames, export the replay](docs/images/workflow.svg)
+
+## Measured results
+
+![Local validation: 72 Python tests and 12 Swift tests passed; 41,564 full-video frames retained; native excerpt matches all 179 FFmpeg frames](docs/images/validation-checks.png)
+
+*Local checks on 10 September 2026. The native 179-frame test uses a three-second excerpt, not the full match. Builds target iOS 26 and were checked with Xcode 27 beta; no signed physical-device performance result is claimed.*
+
+![Full broadcast: observed ball 49.6%, interpolated 6.5%, missing 43.9%; court calibrated 50.6%; 190 unreviewed event candidates](docs/images/validation-broadcast.png)
+
+The complete 11-minute-34-second broadcast retained all **41,564 frames and its audio track**. Reopening, synchronized replay and point-event clip export passed. The 112 hit, 54 bounce and 24 rally candidates remain unreviewed; **confirmed statistics are zero**. Coverage measures whether an estimate exists, not whether it is correct.
+
+| Actual annotated output, 30.01 s | Observed failure, 10.01 s |
+|---|---|
+| ![Actual output showing court lines, two selected players and model overlays](docs/images/broadcast-result.jpg) | ![Actual model output with a ball false positive on the yellow scoreboard serve icon](docs/images/broadcast-false-positive.jpg) |
+| Court, player, pose and trajectory overlays from the completed run. | The yellow scoreboard icon was mistaken for the ball. Player IDs also change over time. |
+
+*Frames from the user-supplied broadcast test footage, shown as diagnostic examples. These images do not establish detection accuracy or ownership of the broadcast.*
+
+See [validation details](VALIDATION.md) and the [chart data snapshot](docs/data/validation-2026-09-10.json). Figures can be regenerated with `.venv/bin/python scripts/render_validation_charts.py` in the project environment.
+
+## iOS interface
+
+The native app uses SwiftUI screens for a private match library, video review and event correction.
+
+<table>
+  <tr><th>Match library</th><th>Video review</th><th>Event editor</th></tr>
+  <tr>
+    <td><img src="docs/images/ios-library.png" width="260" alt="Actual SwiftUI match library with singles or doubles selection and a UI demo recording"></td>
+    <td><img src="docs/images/ios-review.png" width="260" alt="Actual SwiftUI review screen with frame controls, offline analysis, court calibration and event tools"></td>
+    <td><img src="docs/images/ios-editor.png" width="260" alt="Actual SwiftUI bounce editor with optional landing coordinates, reviewed, exclude and favorite controls"></td>
+  </tr>
+</table>
+
+*Actual iPhone 17 Pro / iOS 27 simulator captures of the production SwiftUI views. An isolated showcase launches each screen directly with a three-second solid-green **UI demo** video and an unsaved example event. The green video area is deliberate fixture content. No match detections or confirmed results are simulated; these screenshots demonstrate the current interface, not a completed tap-by-tap acceptance test.*
+
+Library → choose a recording → review frames and calibrate the court → correct events → export a clip. Source and build instructions: [ios/README.md](ios/README.md). Physical-device performance, thermal behavior and accuracy remain [validation gates](docs/IMPLEMENTATION_STATUS.md).
 
 ## Built for your tennis life
 
@@ -47,8 +79,8 @@ The native iOS 26 source and build instructions are in [ios/README.md](ios/READM
 Clone the repository, then from the project folder:
 
 ```sh
-git clone https://github.com/Paulyang5049/tennis-ai-local.git
-cd tennis-ai-local
+git clone https://github.com/Paulyang5049/Tennis-AI-Tracker.git
+cd Tennis-AI-Tracker
 brew install ffmpeg uv
 uv venv --python 3.11 .venv
 uv pip install --python .venv/bin/python -e '.[dev]'
