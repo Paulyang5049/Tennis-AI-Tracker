@@ -422,9 +422,12 @@ Only the solid upstream graph creates data. Dotted links are mandatory provenanc
 ### 5.3 Coordinates and terminology
 
 - Preserve `oriented_pixels_top_left` for source image coordinates.
-- Add a canonical court frame in metres: origin at near-left doubles sideline/baseline after
-  orientation; `x` across court and `y` toward the far baseline. Store court dimensions and
-  orientation explicitly so near/far players can be normalized to attack direction.
+- Preserve the measured v2 court frame in metres: origin at the far-left doubles
+  sideline/baseline in the oriented image, `x` across court and `y` toward the near baseline.
+  Implementation refinement (2026-09-12): both existing Python and Swift homographies use
+  this frame, so v3 declares `far_left_x_right_y_near_m` explicitly and retains old coordinates
+  during migration. Court dimensions remain 10.97 × 23.77 m; attack-direction normalization
+  is a derived view, not a rewrite of stored observations.
 - `hitter_position_court_m` is the player's estimated ground point at contact.
 - `contact_point_image_px` is the ball/racket contact observation in the image.
 - `bounce_position_court_m` is the observed landing/ground-contact estimate.

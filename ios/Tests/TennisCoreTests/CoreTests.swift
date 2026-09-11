@@ -3,6 +3,51 @@ import XCTest
 @testable import TennisCore
 
 final class CoreTests: XCTestCase {
+    func testV3SharedFixturesAndInvalidReferences() throws {
+        for name in ["minimal", "uncertain", "corrected", "full"] {
+            let root = fixture.appendingPathComponent("v3/\(name)")
+            let manifest = try PackageIO.load(root)
+            XCTAssertEqual(manifest.schemaVersion, 3)
+            let graph = try EvidenceBundle.load(root, manifest: manifest)
+            try graph.validate(duration: 5)
+            let data = try ContractJSON.encoder().encode(graph)
+            let decoded = try ContractJSON.decoder().decode(EvidenceBundle.self, from: data)
+            XCTAssertEqual(decoded, graph)
+        }
+        var graph = try EvidenceBundle.load(fixture.appendingPathComponent("v3/full"))
+        graph.events.links![0].bounceId = "missing"
+        XCTAssertThrowsError(try graph.validate(duration: 5))
+    }
+    func testV3StoreAuditAndExport() throws {
+        let source = fixture.appendingPathComponent("v3/full"), root = try temp()
+        let manifest = try PackageIO.load(source)
+        let store = try AnalysisStore(url: root.appendingPathComponent("analysis.sqlite"), identity: ResumeIdentity(manifest: manifest))
+        try store.importEvidence(EvidenceBundle.load(source), duration: 5)
+        var event = try XCTUnwrap(store.events().first)
+        event.stroke = .backhand
+        try store.saveEvent(event, duration: 5)
+        try store.export(to: root, manifest: manifest)
+        let exported = try EvidenceBundle.load(root)
+        XCTAssertEqual(exported.audit.count, 1)
+        XCTAssertEqual(exported.audit[0].before?.stroke, .unknown)
+        XCTAssertEqual(exported.events.events[0].stroke, .backhand)
+        let text = try String(contentsOf: root.appendingPathComponent("events.json"), encoding: .utf8)
+        XCTAssertTrue(text.contains("\"confidence\":null"))
+        XCTAssertEqual(exported.events.links?.count, 1)
+    }
+    func testExplicitV2MigrationPreservesLegacyPosition() throws {
+        let original = try PackageIO.load(fixture)
+        let migrated = try original.migratedToV3()
+        XCTAssertEqual(original.schemaVersion, 2)
+        XCTAssertEqual(migrated.schemaVersion, 3)
+        XCTAssertEqual(migrated.migration?.fromVersion, 2)
+        let events = try ContractJSON.read(EventCollection.self, from: fixture.appendingPathComponent("events.json"))
+        let graph = EvidenceBundle.migrating(events: events.events)
+        try graph.validate(duration: migrated.media.duration)
+        XCTAssertEqual(graph.events.events.first(where: { $0.kind == .bounce })?.position,
+                       events.events.first(where: { $0.kind == .bounce })?.position)
+        XCTAssertTrue(graph.events.assignments!.isEmpty)
+    }
     var fixture:URL { URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("contracts/fixtures") }
     func temp()throws->URL { let root=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true); addTeardownBlock { try? FileManager.default.removeItem(at:root) }; return root }
     func testSharedFixturesAndRoundTrip()throws {

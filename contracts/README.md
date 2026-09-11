@@ -46,3 +46,28 @@ supported by desktop review; conversion into a portable package copies the media
 Reject unknown major schema versions. Ignore unknown additive JSON keys.
 
 `fixtures/` contains synthetic shared fixtures, not private video or trained data.
+# AnalysisPackage v3
+
+v3 adds separately versioned events, tracks, rallies, metrics, insights and an append-only
+event correction log. The v2 reader and existing event semantics remain available. Run
+`tennis-ai package INPUT OUTPUT --version 3` for an explicit copy; the input is never migrated
+in place. A v3 export preserves v3 and rejects downgrade to v2.
+
+Both versions use oriented image pixels. v3 explicitly declares the existing court frame:
+`far_left_x_right_y_near_m`, dimensions 10.97 × 23.77 m. `position` remains bounce-only;
+`contact_point_image_px` is the ball/racket observation and `hitter_position_court_m` is the
+player's ground point. `contact_interval` carries uncertain contact timing independently
+from the backward-compatible instantaneous event anchor. No 3D point is inferred.
+
+`events.json` stores persistent participants, time-bounded scene/track assignments and
+shot-bounce links. Human-verified participant events require a reviewed matching assignment.
+Rallies reference ordered shots; metrics and coaching cards reference their input evidence.
+The `corrections.jsonl` audit survives a crash before `events.json` materialization, while
+`corrections.json` retains legacy court/label corrections. Metrics and insights are invalidated
+after an event change. Four synthetic fixtures are under `fixtures/v3/`; source media is
+intentionally absent. They are contract data, not an accuracy benchmark.
+
+Canonical schemas live here; `scripts/sync_contract_schemas.py` generates the wheel's offline
+schema resource, and its `--check` mode detects drift. Swift exports are validated against
+the same Python schemas in branch CI. Imports bound evidence assets to 32 MiB / 100,000 rows,
+reject duplicate IDs, broken references, non-finite values and escaped/aliased asset paths.

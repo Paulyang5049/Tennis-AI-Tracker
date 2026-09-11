@@ -348,7 +348,13 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
     source, metadata = summary["source"], summary["video"]
     if check_source and sha256(source) != summary["source_sha256"]:
         raise ValueError("Source video changed; cached predictions cannot be reused")
-    corrections_path = output / "corrections.json"
+    manifest = load_manifest(output) if (output / "manifest.json").exists() else None
+    artifacts = (
+        manifest["artifacts"]
+        if manifest
+        else {"frames": "frames.jsonl", "events": "events.json", "corrections": "corrections.json"}
+    )
+    corrections_path = relative_asset(output, artifacts["corrections"])
     corrections = json.loads(corrections_path.read_text()) if corrections_path.exists() else {}
     connection = connect(output)
     records = corrected_records(
@@ -406,7 +412,7 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
         review.close()
         review_path.replace(output / "review.sqlite")
         pending.replace(output / "annotated.mp4")
-        json_path.replace(output / "frames.jsonl")
+        json_path.replace(relative_asset(output, artifacts["frames"]))
         summary.update(
             {
                 "status": "complete",
@@ -422,9 +428,17 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
         )
         from tennis_ai.events import regenerate_events
 
-        regenerate_events(
-            output / "frames.jsonl", output / "events.json", output / "corrections.json"
-        )
+        if manifest and manifest["schema_version"] == 3:
+            from tennis_ai.evidence import load_evidence
+
+            # Rendering overlays does not replace the versioned review graph.
+            load_evidence(output, manifest)
+        else:
+            regenerate_events(
+                relative_asset(output, artifacts["frames"]),
+                relative_asset(output, artifacts["events"]),
+                corrections_path,
+            )
         atomic_json(summary_path, summary)
         update_status(output, "complete")
         jobs.initialize(connection)

@@ -39,16 +39,16 @@ evidence, the contracts and evidence win until they are deliberately updated tog
 
 ## Current technical truth
 
-- `contracts/analysis-v2.schema.json`, `contracts/events-v2.schema.json` and
-  `contracts/fixtures/` define the current portable Python/Swift interchange contract.
+- `contracts/analysis-v2.schema.json`, `contracts/events-v2.schema.json`, the additive
+  v3/derived-asset schemas and `contracts/fixtures/` define portable Python/Swift interchange.
+  v3 migration is explicit; its court coordinates retain the v2 far-left origin.
 - `docs/IMPLEMENTATION_STATUS.md`, `VALIDATION.md` and
   `docs/data/validation-2026-09-10.json` are the sources for implemented status and measured
   results. Update them when the corresponding evidence changes.
 - The current automatic event detector in `src/tennis_ai/events.py` is a candidate
   heuristic, not a validated contact, bounce, rally or stroke classifier.
-- Current AnalysisPackage v2 uses oriented video pixels and supports manually calibrated
-  court geometry. Any v3 change must retain a v2 reader or provide an explicit,
-  fixture-tested migration.
+- AnalysisPackage v2/v3 use oriented video pixels and manually calibrated court geometry.
+  Preserve the v2 reader and fixture-tested explicit migration when extending v3.
 - `docs/plans/2026-09-11-1411-feat-tennis-coaching-intelligence-plan.md` is the approved
   implementation sequence once the user accepts it. It does not override evidence or
   release gates.

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "source_commit": null,
+  "model_sha256": null,
+  "protected_environment_approved": false,
+  "gates": {
+    "contracts": {"status": "local_checks_only", "evidence_sha256": null},
+    "phone_accuracy": {"status": "awaiting_footage_and_labels", "evidence_sha256": null},
+    "event_accuracy": {"status": "awaiting_footage_and_labels", "evidence_sha256": null},
+    "coreml_parity": {"status": "awaiting_labelled_samples", "evidence_sha256": null},
+    "physical_device": {"status": "awaiting_device_measurements", "evidence_sha256": null},
+    "signing": {"status": "not_configured", "evidence_sha256": null},
+    "model_provenance": {"status": "awaiting_promoted_model", "evidence_sha256": null},
+    "distribution_licence": {"status": "pending_review", "evidence_sha256": null},
+    "release_notes": {"status": "development_only", "evidence_sha256": null}
+  }
+}

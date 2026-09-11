@@ -87,7 +87,41 @@ public final class AnalysisStore: @unchecked Sendable {
         }
     }
     public func saveEvent(_ event:AnalysisEvent,duration:Double)throws {
-        try event.validate(duration:duration); try synchronized { try putEvent(event,preserveReviewed:false) }
+        try event.validate(duration:duration)
+        try synchronized {
+            guard var graph: EvidenceBundle = try metadata("evidence") else {
+                try putEvent(event, preserveReviewed: false); return
+            }
+            var corrected = event
+            let before = try eventById(event.id)
+            if before?.position != event.position && event.position != nil { corrected.positionSource = "reviewed_bounce" }
+            if before?.start != event.start && before?.contactInterval == event.contactInterval { corrected.contactInterval = nil }
+            corrected.provenance = "manual"; corrected.confidence = nil; corrected.fieldConfidence = [:]
+            graph.events.events.removeAll { $0.id == corrected.id }; graph.events.events.append(corrected)
+            graph.events.events.sort { ($0.start, $0.id) < ($1.start, $1.id) }
+            graph.audit.append(EvidenceCorrection(schemaVersion: 1, id: UUID().uuidString, sequence: graph.audit.count + 1,
+                entityId: corrected.id, actor: "local-user", timestamp: ISO8601DateFormatter().string(from: Date()),
+                reason: "event review", before: before, after: corrected))
+            graph.metrics.metrics = []; graph.insights.insights = []
+            try graph.validate(duration: duration)
+            try sql("BEGIN IMMEDIATE")
+            do {
+                try putEvent(corrected, preserveReviewed: false)
+                try setMetadata("evidence", graph); try sql("COMMIT")
+            } catch { try? sql("ROLLBACK"); throw error }
+        }
+    }
+    public func evidence() throws -> EvidenceBundle? { try synchronized { try metadata("evidence") } }
+    public func importEvidence(_ graph: EvidenceBundle, duration: Double) throws {
+        try graph.validate(duration: duration)
+        try synchronized {
+            try sql("BEGIN IMMEDIATE")
+            do {
+                try sql("DELETE FROM events")
+                for event in graph.events.events { try putEvent(event, preserveReviewed: false) }
+                try setMetadata("evidence", graph); try sql("COMMIT")
+            } catch { try? sql("ROLLBACK"); throw error }
+        }
     }
     public func events()throws->[AnalysisEvent] {
         try synchronized {
@@ -123,6 +157,7 @@ public final class AnalysisStore: @unchecked Sendable {
         }
     }
     public func export(to root:URL,manifest:Manifest)throws {
+        try manifest.validate()
         try synchronized {
             let target=try PackageIO.asset(manifest.artifacts["frames"]!,in:root)
             let temporary=target.appendingPathExtension("pending")
@@ -137,7 +172,15 @@ public final class AnalysisStore: @unchecked Sendable {
                 try handle.synchronize(); try handle.close()
                 if FileManager.default.fileExists(atPath:target.path) { _ = try FileManager.default.replaceItemAt(target,withItemAt:temporary) }
                 else { try FileManager.default.moveItem(at:temporary,to:target) }
-                try ContractJSON.write(EventCollection(events:events()),to:PackageIO.asset(manifest.artifacts["events"]!,in:root))
+                if manifest.schemaVersion == 3 {
+                    let graph: EvidenceBundle
+                    if let saved: EvidenceBundle = try metadata("evidence") { graph = saved }
+                    else { graph = EvidenceBundle.migrating(events: try events()) }
+                    try graph.write(to: root, manifest: manifest)
+                } else {
+                    guard try evidence() == nil else { throw PackageError.invalid("Cannot downgrade v3 evidence to v2") }
+                    try ContractJSON.write(EventCollection(events:events()),to:PackageIO.asset(manifest.artifacts["events"]!,in:root))
+                }
                 try ContractJSON.write(corrections(),to:PackageIO.asset(manifest.artifacts["corrections"]!,in:root))
                 try ContractJSON.write(manifest,to:root.appendingPathComponent("manifest.json"))
             } catch { try? FileManager.default.removeItem(at:temporary); throw error }

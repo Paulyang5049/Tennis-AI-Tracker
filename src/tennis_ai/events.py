@@ -260,7 +260,7 @@ def generate_candidates(frames):
 
 def _event_list(events):
     if isinstance(events, dict):
-        if events.get("schema_version") != 2:
+        if events.get("schema_version") not in (2, 3):
             raise ValueError("Unsupported event schema")
         events = events["events"]
     result = [deepcopy(validate_event(event)) for event in events]

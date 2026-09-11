@@ -1,0 +1,42 @@
+{
+  "schema_version": 3,
+  "media": {
+    "id": "fixture",
+    "sha256": "fixture",
+    "path": "source.mp4",
+    "width": 320,
+    "height": 240,
+    "duration": 5,
+    "origin": 0
+  },
+  "settings": {
+    "players": 2
+  },
+  "model_provenance": {},
+  "status": "complete",
+  "coordinate_system": "oriented_pixels_top_left",
+  "court_coordinate_system": "far_left_x_right_y_near_m",
+  "artifacts": {
+    "frames": "frames.jsonl",
+    "events": "events.json",
+    "corrections": "corrections.json",
+    "tracks": "tracks.jsonl",
+    "rallies": "rallies.json",
+    "metrics": "metrics.json",
+    "insights": "insights.json",
+    "audit": "corrections.jsonl"
+  },
+  "asset_versions": {
+    "frames": 2,
+    "events": 3,
+    "corrections": 2,
+    "tracks": 1,
+    "rallies": 1,
+    "metrics": 1,
+    "insights": 1,
+    "audit": 1
+  },
+  "review_policy_version": "human-reviewed-v1",
+  "derivation_versions": {},
+  "storage_policy": "local-no-backup-explicit-export"
+}

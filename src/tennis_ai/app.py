@@ -14,7 +14,14 @@ import gradio as gr
 from tennis_ai.annotation import annotate_ball, export_event_annotations
 from tennis_ai.artifacts import validate_bundle
 from tennis_ai.events import summarize_events
-from tennis_ai.library import edit_event, events_for, export_event_clip, frame_at, statistics
+from tennis_ai.library import (
+    delete_match,
+    edit_event,
+    events_for,
+    export_event_clip,
+    frame_at,
+    statistics,
+)
 from tennis_ai.pipeline import Settings, analyze, load_summary, render_cached, resume_analysis
 from tennis_ai.render import DEFAULT_OVERLAYS
 from tennis_ai.review import preview, save_correction
@@ -229,6 +236,14 @@ def create_app(root):
             saved,
         ]
 
+    def remove_saved(selection, confirmation):
+        delete_match(root / "outputs", selection, confirmation)
+        return (
+            gr.update(choices=library_choices(), value=None),
+            "Match and derived clips permanently deleted.",
+            "",
+        )
+
     def event_choices(folder):
         if not folder:
             return gr.update(
@@ -372,6 +387,13 @@ def create_app(root):
                         refresh_library: Any = gr.Button("Refresh library")
                         open_library: Any = gr.Button("Open selected")
                         resume_library: Any = gr.Button("Resume selected")
+                    delete_confirmation = gr.Textbox(
+                        label="Delete match · type the exact folder name to confirm"
+                    )
+                    delete_library: Any = gr.Button(
+                        "Permanently delete selected match", variant="stop"
+                    )
+                    delete_message = gr.Textbox(label="Deletion result", interactive=False)
                 with gr.Row():
                     video = gr.File(
                         label="Tennis video",
@@ -595,6 +617,11 @@ def create_app(root):
                     summary.render()
         status.change(status_card, status, activity, queue=False)
         refresh_library.click(lambda: gr.update(choices=library_choices()), outputs=saved_runs)
+        delete_library.click(
+            remove_saved,
+            [saved_runs, delete_confirmation],
+            [saved_runs, delete_message, delete_confirmation],
+        )
         open_library.click(
             open_saved,
             saved_runs,

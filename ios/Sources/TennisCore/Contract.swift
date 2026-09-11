@@ -49,11 +49,26 @@ public struct Manifest: Codable, Equatable, Sendable {
     public var media: Media; public var settings: AnalysisSettings; public var modelProvenance: [String: String]
     public var status: AnalysisStatus; public var coordinateSystem = "oriented_pixels_top_left"
     public var artifacts = ["frames": "frames.jsonl", "events": "events.json", "corrections": "corrections.json"]
+    public var assetVersions: [String: Int]?
+    public var courtCoordinateSystem: String?
+    public var reviewPolicyVersion: String?
+    public var derivationVersions: [String: String]?
+    public var storagePolicy: String?
+    public var migration: PackageMigration?
     public init(media: Media, settings: AnalysisSettings = .init(), modelProvenance: [String: String] = [:], status: AnalysisStatus = .paused) {
         self.media = media; self.settings = settings; self.modelProvenance = modelProvenance; self.status = status
     }
     public func validate() throws {
-        guard schemaVersion == 2 else { throw PackageError.unsupportedVersion(schemaVersion) }
+        guard [2, 3].contains(schemaVersion) else { throw PackageError.unsupportedVersion(schemaVersion) }
+        if schemaVersion == 3 {
+            guard assetVersions == EvidenceBundle.assetVersions,
+                  courtCoordinateSystem == "far_left_x_right_y_near_m",
+                  reviewPolicyVersion == "human-reviewed-v1", derivationVersions != nil,
+                  storagePolicy == "local-no-backup-explicit-export",
+                  EvidenceBundle.assetVersions.keys.allSatisfy({ artifacts[$0] != nil }) else {
+                throw PackageError.invalid("Invalid v3 versions, storage or review policy")
+            }
+        }
         guard [2,4].contains(settings.players), media.width > 0, media.height > 0,
               media.duration.isFinite, media.duration > 0, media.origin.isFinite,
               !media.id.isEmpty, !media.sha256.isEmpty,
@@ -110,6 +125,12 @@ public struct AnalysisEvent: Codable, Equatable, Identifiable, Sendable {
     public var scene: Int = 0; public var playerId: Int?; public var stroke: Stroke = .unknown
     public var position: [Double]?; public var provenance = "manual"; public var reviewed = true
     public var confidence: Double?; public var excluded = false; public var favorite = false
+    public var participantId: String?
+    public var contactInterval: [Double]?
+    public var contactPointImagePx: [Double]?
+    public var hitterPositionCourtM: [Double]?
+    public var fieldConfidence: [String: Double?]?
+    public var positionSource: String?
     public init(id: String = UUID().uuidString, kind: EventKind, start: Double, end: Double? = nil) {
         self.id = id; self.kind = kind; self.start = start; self.end = end ?? start
     }
@@ -122,8 +143,11 @@ public struct AnalysisEvent: Codable, Equatable, Identifiable, Sendable {
         if let c = confidence { guard c.isFinite, (0...1).contains(c) else { throw PackageError.invalid("Invalid confidence") } }
     }
 }
-public struct EventCollection: Codable, Sendable {
+public struct EventCollection: Codable, Equatable, Sendable {
     public var schemaVersion = 2; public var events: [AnalysisEvent]
+    public var participants: [Participant]?
+    public var assignments: [SceneRoleAssignment]?
+    public var links: [ShotBounceLink]?
     public init(events: [AnalysisEvent] = []) { self.events = events }
 }
 public struct Corrections: Codable, Equatable, Sendable {
@@ -168,7 +192,9 @@ public enum PackageIO {
         if FileManager.default.fileExists(atPath: url.path) { manifest = try ContractJSON.read(Manifest.self, from: url) }
         else { manifest = try legacy(root) }
         try manifest.validate(); _ = try asset(manifest.media.path, in: root)
-        for path in manifest.artifacts.values { _ = try asset(path, in: root) }
+        let paths = try manifest.artifacts.values.map { try asset($0, in: root) }
+        let reserved = [try asset(manifest.media.path, in: root), root.appendingPathComponent("manifest.json").resolvingSymlinksInPath()]
+        guard Set(paths).count == paths.count, Set(paths).isDisjoint(with: reserved) else { throw PackageError.invalid("Package assets must be distinct from media and manifest") }
         return manifest
     }
     private static func legacy(_ root: URL) throws -> Manifest {

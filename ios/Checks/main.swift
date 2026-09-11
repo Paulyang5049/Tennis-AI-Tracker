@@ -40,3 +40,17 @@ try store.export(to:root,manifest:manifest)
 var roundtrip=[FrameRecord](); try PackageIO.readFrames(root.appendingPathComponent("frames.jsonl")) { roundtrip.append($0) }
 try check(roundtrip==frames,"export roundtrip")
 print("CoreCheck: fixtures, statistics, rollback, identity, path containment, homography, resume and export passed")
+
+for name in ["minimal", "uncertain", "corrected", "full"] {
+    let source = fixture.appendingPathComponent("v3/\(name)")
+    let v3 = try PackageIO.load(source)
+    let graph = try EvidenceBundle.load(source, manifest: v3)
+    try graph.validate(duration: v3.media.duration)
+    if CommandLine.arguments.count > 2 {
+        let output = URL(fileURLWithPath: CommandLine.arguments[2]).appendingPathComponent(name)
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        try graph.write(to: output, manifest: v3)
+        try ContractJSON.write(v3, to: output.appendingPathComponent("manifest.json"))
+    }
+}
+print("CoreCheck: v3 shared evidence fixtures passed")

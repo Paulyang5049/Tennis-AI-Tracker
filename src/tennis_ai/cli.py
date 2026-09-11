@@ -54,6 +54,12 @@ def main():
     )
     package.add_argument("folder")
     package.add_argument("destination")
+    package.add_argument(
+        "--version",
+        type=int,
+        choices=[2, 3],
+        help="Explicit save-as version; default preserves the source version",
+    )
     args = parser.parse_args()
     cancel = threading.Event()
     signal.signal(signal.SIGINT, lambda *_: cancel.set())
@@ -79,7 +85,7 @@ def main():
         elif args.command == "package":
             from tennis_ai.package import export_package
 
-            print(export_package(args.folder, args.destination))
+            print(export_package(args.folder, args.destination, version=args.version))
         elif args.command == "benchmark":
             from tennis_ai.benchmark import evaluate_manifest
             from tennis_ai.package import atomic_json

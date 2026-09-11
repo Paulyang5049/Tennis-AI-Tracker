@@ -77,3 +77,36 @@ def test_export_rejects_changed_source_and_cleans_staging(tmp_path):
         export_package(legacy, tmp_path / "export")
     assert not (tmp_path / "export").exists()
     assert not list(tmp_path.glob(".package-*"))
+
+
+def test_explicit_v3_migration_and_roundtrip_preserve_v2(tmp_path):
+    from tennis_ai.evidence import load_evidence
+
+    source = tmp_path / "run"
+    source.mkdir()
+    video = source / "source.mp4"
+    video.write_bytes(b"video")
+    metadata = {"width": 320, "height": 180, "duration": 2, "origin": 0}
+    write_manifest(source, video, metadata, {"players": 2}, {}, "complete")
+    (source / "frames.jsonl").write_text("")
+    (source / "summary.json").write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "source": str(video),
+                "source_sha256": sha256(video),
+                "video": metadata,
+                "settings": {"players": 2},
+            }
+        )
+    )
+    before = (source / "manifest.json").read_bytes()
+    target = export_package(source, tmp_path / "v3", version=3)
+    assert (source / "manifest.json").read_bytes() == before
+    assert load_manifest(target)["migration"]["from_version"] == 2
+    assert load_evidence(target)["events"]["participants"] == []
+    second = export_package(target, tmp_path / "roundtrip")
+    assert load_manifest(second)["schema_version"] == 3
+    assert load_evidence(second) == load_evidence(target)
+    with pytest.raises(ValueError, match="downgrade"):
+        export_package(target, tmp_path / "downgrade", version=2)

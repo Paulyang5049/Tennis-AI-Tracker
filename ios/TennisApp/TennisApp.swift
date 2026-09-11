@@ -62,6 +62,7 @@ struct ReviewView:View {
     @State private var showOverlay=true
     @State private var name=""
     @State private var selectedPlayer=1
+    @State private var migratedItem: MatchItem?
     private let timer=Timer.publish(every:0.15,on:.main,in:.common).autoconnect()
     var body:some View {
         ScrollView {
@@ -114,8 +115,12 @@ struct ReviewView:View {
                 }
                 if let exportURL { ShareLink("分享片段",item:exportURL) }
                 Button("更新可互操作分析文件") { perform { guard let store else { return }; var m=try PackageIO.load(item.folder); m.status=try store.status(); try store.export(to:item.folder,manifest:m) } }
+                if item.manifest.schemaVersion == 2 && item.manifest.status == .complete {
+                    Button("另存为新版分析（保留原比赛）") { perform { migratedItem = try LocalLibrary.saveAsV3(item) } }
+                }
             }.padding()
         }.navigationTitle(item.title)
+        .navigationDestination(item: $migratedItem) { ReviewView(item: $0) }
         .task { perform { player.replaceCurrentItem(with:AVPlayerItem(url:try PackageIO.asset(item.manifest.media.path,in:item.folder))); try openStore() } }
         .onReceive(timer) { _ in
             let time=player.currentTime().seconds-item.manifest.media.origin

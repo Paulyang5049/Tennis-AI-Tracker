@@ -2,7 +2,7 @@ name: iOS core and app
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
 
 permissions:
@@ -14,8 +14,30 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.0.1
       - name: Test shared data and analysis core
-        run: swift test --package-path ios
+        run: |
+          mkdir -p reports
+          set -o pipefail
+          swift test --package-path ios 2>&1 | tee reports/swift-tests.txt
+      - name: Validate Swift exports with Python contracts
+        run: |
+          sh ios/check_core.sh
+          mkdir -p reports/contract-parity
+          ios/.build/core-check contracts/fixtures reports/contract-parity
+          PYTHONPATH=src uv run --no-project --with jsonschema==4.26.0 python -c 'from pathlib import Path; from tennis_ai.evidence import load_evidence; [load_evidence(p) for p in Path("reports/contract-parity").iterdir()]'
+          python3 scripts/development_evidence.py > reports/development.json
+      - name: Publish development-only Swift test report
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: development-only-swift-tests-${{ github.sha }}
+          path: |
+            reports/swift-tests.txt
+            reports/development.json
+            reports/contract-parity/
+          retention-days: 14
+          if-no-files-found: warn
       - name: Generate native project
         run: python3 ios/generate_project.py
       - name: Compile simulator app without signing
@@ -25,3 +47,12 @@ jobs:
           -destination 'generic/platform=iOS Simulator'
           -derivedDataPath ios/DerivedData
           CODE_SIGNING_ALLOWED=NO build
+      - name: Package unsigned simulator app
+        run: ditto -c -k --keepParent ios/DerivedData/Build/Products/Debug-iphonesimulator/TennisOffline.app development-only-simulator.zip
+      - name: Publish development-only simulator app
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: development-only-unsigned-simulator-${{ github.sha }}
+          path: development-only-simulator.zip
+          retention-days: 14
+          if-no-files-found: error

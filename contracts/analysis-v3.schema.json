@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "media",
+    "settings",
+    "model_provenance",
+    "status",
+    "coordinate_system",
+    "court_coordinate_system",
+    "artifacts",
+    "asset_versions",
+    "review_policy_version",
+    "derivation_versions",
+    "storage_policy"
+  ],
+  "properties": {
+    "court_coordinate_system": {"const": "far_left_x_right_y_near_m"},
+    "schema_version": {
+      "const": 3
+    },
+    "media": {
+      "$ref": "analysis-v2.schema.json#/properties/media"
+    },
+    "settings": {
+      "$ref": "analysis-v2.schema.json#/properties/settings"
+    },
+    "model_provenance": {
+      "$ref": "analysis-v2.schema.json#/properties/model_provenance"
+    },
+    "status": {
+      "$ref": "analysis-v2.schema.json#/properties/status"
+    },
+    "coordinate_system": {
+      "const": "oriented_pixels_top_left"
+    },
+    "artifacts": {
+      "type": "object",
+      "required": [
+        "frames",
+        "events",
+        "corrections",
+        "tracks",
+        "rallies",
+        "metrics",
+        "insights",
+        "audit"
+      ],
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "asset_versions": {
+      "type": "object",
+      "required": [
+        "frames",
+        "events",
+        "corrections",
+        "tracks",
+        "rallies",
+        "metrics",
+        "insights",
+        "audit"
+      ],
+      "properties": {
+        "frames": {
+          "const": 2
+        },
+        "events": {
+          "const": 3
+        },
+        "corrections": {
+          "const": 2
+        },
+        "tracks": {
+          "const": 1
+        },
+        "rallies": {
+          "const": 1
+        },
+        "metrics": {
+          "const": 1
+        },
+        "insights": {
+          "const": 1
+        },
+        "audit": {
+          "const": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "review_policy_version": {
+      "const": "human-reviewed-v1"
+    },
+    "derivation_versions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "storage_policy": {
+      "const": "local-no-backup-explicit-export"
+    },
+    "migration": {
+      "type": "object",
+      "required": [
+        "from_version",
+        "source_media_sha256",
+        "method"
+      ],
+      "properties": {
+        "from_version": {
+          "const": 2
+        },
+        "source_media_sha256": {
+          "type": "string",
+          "minLength": 1
+        },
+        "method": {
+          "const": "additive-v1"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

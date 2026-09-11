@@ -1,6 +1,6 @@
 # Offline tennis upgrade status
 
-This branch implements the desktop review/data workflow, a shared AnalysisPackage v2,
+This branch implements the desktop review/data workflow, shared AnalysisPackage v2/v3,
 a Core ML conversion toolchain and a native iOS 26 development app. It is not an
 App Store release, a validated automatic stroke classifier or a phone accuracy report.
 
@@ -12,6 +12,18 @@ App Store release, a validated automatic stroke classifier or a phone accuracy r
 - Explicit ball/absence annotations, event coverage intervals and match-isolated benchmark reports.
 - Candidate hits/bounces/rallies. All automatic strokes remain unknown; manual labels cover five strokes.
 - Isolated, hash-locked Core ML conversion with verified tensor shape and package digest.
+- Explicit v2-to-v3 save-as, shared evidence fixtures, separate participant/assignment/link
+  contracts, durable event correction audit and invalidated derived claims after review edits.
+- Owner-restricted desktop package folders, exact-name match deletion, iOS protected storage
+  and default backup exclusion. Physical-device privacy acceptance remains pending.
+- Feature-branch CI uploads development-only test reports, wheel, contract/benchmark status
+  and unsigned simulator build. Promotion readiness fails closed while evidence is missing.
+
+The 2026-09-12 foundation batch passed 103 Python tests, 15 Swift tests, four Swift-to-Python
+fixture exports, wheel resource loading and an unsigned Xcode simulator build. See
+[development evidence](data/development-2026-09-12.json). These are software checks, not
+accuracy, coach utility or physical-device results. The live repository has no protected
+TestFlight/release environment configured; signed distribution is not enabled.
 
 The native implementation and its exact validation results are documented in
 [iOS instructions](../ios/README.md). It uses bundled models and manual court
