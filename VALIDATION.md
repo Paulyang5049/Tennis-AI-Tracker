@@ -4,7 +4,7 @@ Last local run: 2026-09-05 on an Apple M4 MacBook Air with 16 GB RAM, Python 3.1
 
 ## Development-build visual report — 2026-09-10
 
-The README charts and iOS screenshots describe [development revision 5c064e5](https://github.com/Paulyang5049/Tennis-AI-Tracker/blob/5c064e5/), rather than main-branch functionality. Python 72 tests and Swift 12 tests passed. Native integration on a real three-second excerpt retained 179 frames matching FFmpeg and a 2.1-second clip with audio. Signed-device performance and detection accuracy remain unverified.
+The README charts and iOS screenshots describe [development revision 5c064e5](https://github.com/Paulyang5049/Tennis-AI-Tracker/tree/5c064e5/), rather than main-branch functionality. Python 72 tests and Swift 12 tests passed. Native integration on a real three-second excerpt retained 179 frames matching FFmpeg and a 2.1-second clip with audio. Signed-device performance and detection accuracy remain unverified.
 
 ## Full broadcast check — 2026-09-10
 

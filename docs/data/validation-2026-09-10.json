@@ -1,7 +1,13 @@
 {
   "date": "2026-09-10",
-  "python_tests": {"passed": 72, "total": 72},
-  "swift_tests": {"passed": 12, "total": 12},
+  "python_tests": {
+    "passed": 72,
+    "total": 72
+  },
+  "swift_tests": {
+    "passed": 12,
+    "total": 12
+  },
   "full_video": {
     "frames": 41564,
     "expected_frames": 41564,
@@ -9,10 +15,27 @@
     "ball_observed": 0.4955971513810028,
     "ball_interpolated": 0.0652728322586854,
     "court_calibrated": 0.5055095755942642,
-    "candidates": {"Hits": 112, "Bounces": 54, "Rallies": 24},
-    "reviewed_events": 0
+    "candidates": {
+      "Hits": 112,
+      "Bounces": 54,
+      "Rallies": 24
+    },
+    "reviewed_events": 0,
+    "width": 1920,
+    "height": 1080
   },
-  "native_excerpt": {"frames": 179, "ffmpeg_frames": 179, "clip_seconds": 2.1, "audio_tracks": 1},
+  "native_excerpt": {
+    "frames": 179,
+    "ffmpeg_frames": 179,
+    "clip_seconds": 2.1,
+    "audio_tracks": 1
+  },
   "scope": "Local development checks; no labelled accuracy or physical-device performance claim.",
-  "sources": ["VALIDATION.md", "ios/README.md", "outputs/usopen-paul-alcaraz-20260909/summary.json", "outputs/usopen-paul-alcaraz-20260909/validation/full-run-checks.json", "outputs/usopen-paul-alcaraz-20260909/validation/ios-result.txt"]
+  "sources": [
+    "VALIDATION.md",
+    "ios/README.md",
+    "outputs/usopen-paul-alcaraz-20260909/summary.json",
+    "outputs/usopen-paul-alcaraz-20260909/validation/full-run-checks.json",
+    "outputs/usopen-paul-alcaraz-20260909/validation/ios-result.txt"
+  ]
 }
