@@ -22,9 +22,9 @@ dev = ["pytest>=8", "ruff>=0.11", "mypy>=1.15", "build>=1"]
 tennis-ai = "tennis_ai.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/Paulyang5049/tennis-ai-local"
-Repository = "https://github.com/Paulyang5049/tennis-ai-local"
-Issues = "https://github.com/Paulyang5049/tennis-ai-local/issues"
+Homepage = "https://github.com/Paulyang5049/Tennis-AI-Tracker"
+Repository = "https://github.com/Paulyang5049/Tennis-AI-Tracker"
+Issues = "https://github.com/Paulyang5049/Tennis-AI-Tracker/issues"
 [tool.setuptools.packages.find]
 where = ["src"]
 [tool.ruff]
