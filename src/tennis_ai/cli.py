@@ -25,6 +25,12 @@ def main():
     analysis.add_argument("--device", default="auto", choices=["auto", "cpu", "mps", "cuda"])
     analysis.add_argument("--ball-bundle")
     analysis.add_argument("--court-bundle")
+    analysis.add_argument(
+        "--ball-tracker", choices=["baseline-v1", "experimental-motion-v1"], default="baseline-v1"
+    )
+    analysis.add_argument(
+        "--overlay-masks", help="JSON list of normalized overlay boxes; experimental tracker only"
+    )
     resume = commands.add_parser("resume", help="Continue an interrupted analysis")
     resume.add_argument("output")
     render = commands.add_parser("render")
@@ -44,6 +50,15 @@ def main():
     event.add_argument("folder")
     event.add_argument("--id", help="Existing event id; omit to add a manual event")
     event.add_argument("--edit", help="Path to a JSON object of edited event fields")
+    identity = commands.add_parser(
+        "review-entity", help="Review a v3 participant, side interval or rally"
+    )
+    identity.add_argument("folder")
+    identity.add_argument("kind", choices=["participant", "assignment", "rally"])
+    identity.add_argument(
+        "json_file", help="Complete entity JSON; records an append-only correction"
+    )
+    identity.add_argument("--reason", default="manual review")
     clip = commands.add_parser("clip", help="Export an original-video interval with audio")
     clip.add_argument("folder")
     clip.add_argument("--start", type=float, required=True)
@@ -78,10 +93,24 @@ def main():
                 args.video,
                 args.output,
                 args.root,
-                Settings(args.players, args.device, args.ball_bundle, args.court_bundle),
+                Settings(
+                    args.players,
+                    args.device,
+                    args.ball_bundle,
+                    args.court_bundle,
+                    args.ball_tracker,
+                    json.loads(Path(args.overlay_masks).read_text()) if args.overlay_masks else [],
+                ),
                 cancel,
                 lambda f, m: print(f"{f:.0%}: {m}", flush=True),
             )
+        elif args.command == "review-entity":
+            from tennis_ai.evidence import read_bounded, review_entity
+
+            result = review_entity(
+                args.folder, args.kind, read_bounded(Path(args.json_file)), reason=args.reason
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
         elif args.command == "package":
             from tennis_ai.package import export_package
 

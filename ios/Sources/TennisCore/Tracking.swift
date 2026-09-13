@@ -105,6 +105,10 @@ public struct TemporalEvents: Codable, Equatable, Sendable {
     public init() {}
     public mutating func consume(_ frame: FrameRecord) -> [AnalysisEvent] {
         var events = [AnalysisEvent]()
+        if frame.cameraMoving {
+            if let rally = finish(scene: frame.cut ? max(0, frame.scene - 1) : frame.scene) { events.append(rally) }
+            recent = []; return events
+        }
         if frame.cut {
             if let rally=finish(scene: frame.scene-1) { events.append(rally) }; recent=[]
         }
@@ -133,7 +137,8 @@ public struct TemporalEvents: Codable, Equatable, Sendable {
         } else if v0[1]>50, v1[1]<(-50) {
             // Image-space direction changes are only review candidates, never verified bounces.
             event=AnalysisEvent(id: "bounce-\(frame.scene)-\(frame.frame-1)",kind: .bounce,start: b.time)
-            if let court=frame.court { event?.position=Homography.project(b.xy,matrix: court.matrix) }
+            // A trajectory turn is not proof of ground contact. Position stays unknown
+            // until the bounce and its observed image point are reviewed.
         }
         if var event {
             event.scene=frame.scene; event.provenance="automatic"; event.reviewed=false

@@ -5,7 +5,7 @@ import json
 import sqlite3
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from tennis_ai import jobs
@@ -19,8 +19,10 @@ from tennis_ai.package import (
     update_status,
     write_manifest,
 )
+from tennis_ai.player_tracking import SceneRoles
+from tennis_ai.quality import quality_for_record, sharpness, summarize_quality
 from tennis_ai.render import Renderer
-from tennis_ai.tracking import BallTracker, SceneMonitor, interpolate
+from tennis_ai.tracking import SceneMonitor, create_ball_tracker, interpolate
 from tennis_ai.video import Cancelled, VideoWriter, decode, mux_audio, probe
 
 
@@ -30,12 +32,15 @@ class Settings:
     device: str = "auto"
     ball_bundle: str | None = None
     court_bundle: str | None = None
+    ball_tracker: str = "baseline-v1"
+    overlay_masks: list[list[float]] = field(default_factory=list)
 
     def __post_init__(self):
         if self.players not in (2, 4):
             raise ValueError("Choose singles (2) or doubles (4)")
         if self.device not in ("auto", "cpu", "mps", "cuda"):
             raise ValueError("Unknown inference device")
+        create_ball_tracker(self.ball_tracker, self.overlay_masks)
 
 
 def connect(folder):
@@ -67,7 +72,17 @@ def select_players(players, court, limit, previous=None):
 
 def fingerprints(root, settings, model_factory):
     result = {"adapter": f"{model_factory.__module__}.{model_factory.__qualname__}"}
-    for module in ("pipeline.py", "tracking.py", "models.py", "jobs.py", "geometry.py", "video.py"):
+    for module in (
+        "pipeline.py",
+        "tracking.py",
+        "models.py",
+        "jobs.py",
+        "geometry.py",
+        "video.py",
+        "quality.py",
+        "positions.py",
+        "player_tracking.py",
+    ):
         result[module] = sha256(Path(__file__).parent / module)
     if model_factory is Models:
         root = Path(root)
@@ -198,13 +213,17 @@ def _analyze(
         models = model_factory(
             root, settings.device, settings.ball_bundle, settings.court_bundle, metadata["fps"]
         )
-        ball_tracker, scene_monitor = BallTracker(), SceneMonitor()
+        ball_tracker = create_ball_tracker(settings.ball_tracker, settings.overlay_masks)
+        scene_monitor = SceneMonitor()
         scene, court, last_calibration, last_frame = 0, None, -10.0, -1
         if checkpoint:
             import numpy as np
 
             models.restore(checkpoint["model"])
-            ball_tracker.history.extend((t, xy) for t, xy in checkpoint["ball_history"])
+            if "ball_tracker" in checkpoint:
+                ball_tracker.restore(checkpoint["ball_tracker"])
+            else:
+                ball_tracker.history.extend((t, xy) for t, xy in checkpoint["ball_history"])
             previous = checkpoint["previous_image"]
             scene_monitor.previous = np.asarray(previous, dtype=np.uint8) if previous else None
             scene, court = checkpoint["scene"], checkpoint["court"]
@@ -218,6 +237,7 @@ def _analyze(
                 "court": court,
                 "last_calibration": last_calibration,
                 "ball_history": list(ball_tracker.history),
+                "ball_tracker": ball_tracker.snapshot(),
                 "previous_image": scene_monitor.previous.tolist()
                 if scene_monitor.previous is not None
                 else None,
@@ -257,6 +277,10 @@ def _analyze(
                 "ball_candidates": balls,
                 "ball": ball,
             }
+            record["quality"] = quality_for_record(
+                record, frame.shape, last_calibration, sharpness(frame)
+            )
+            record["ball"]["visibility"] = "observed" if ball["status"] == "observed" else "unknown"
             connection.execute(
                 "INSERT INTO frames VALUES (?, ?, ?)",
                 (index, timestamp, json.dumps(record, allow_nan=False)),
@@ -308,6 +332,7 @@ def _analyze(
 
 
 def corrected_records(records, corrections, shape, limit):
+    roles = SceneRoles(players=limit)
     active = None
     previous_scene = None
     selected_ids: set[int] = set()
@@ -329,6 +354,10 @@ def corrected_records(records, corrections, shape, limit):
         labels = corrections.get("labels", {}).get(str(record["scene"]), {})
         for player in record["players"]:
             player["label"] = labels.get(str(player["id"]), f"P{player['id']}")
+        record["quality"] = quality_for_record(
+            record, shape, sharpness_value=record.get("quality", {}).get("sharpness")
+        )
+        record["players"] = roles.update(record["players"], record)
         yield record
 
 
@@ -438,6 +467,10 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
                 relative_asset(output, artifacts["frames"]),
                 relative_asset(output, artifacts["events"]),
                 corrections_path,
+            )
+        with relative_asset(output, artifacts["frames"]).open() as stream:
+            summary["capture_quality"] = summarize_quality(
+                json.loads(line) for line in stream if line.strip()
             )
         atomic_json(summary_path, summary)
         update_status(output, "complete")

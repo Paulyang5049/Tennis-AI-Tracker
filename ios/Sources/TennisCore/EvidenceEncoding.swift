@@ -89,7 +89,7 @@ extension EvidenceMetric {
 }
 
 extension PlayerPosition {
-    enum CodingKeys: String, CodingKey { case schemaVersion, timestamp, scene, trackId, side, positionCourtM, method, reviewed, calibrationId }
+    enum CodingKeys: String, CodingKey { case schemaVersion, timestamp, scene, trackId, side, positionCourtM, method, reviewed, calibrationId, imagePointPx, errorM, roleState }
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(schemaVersion, forKey: .schemaVersion)
@@ -101,11 +101,14 @@ extension PlayerPosition {
         try container.encode(method, forKey: .method)
         try container.encode(reviewed, forKey: .reviewed)
         try container.encode(calibrationId, forKey: .calibrationId)
+        try container.encodeIfPresent(imagePointPx, forKey: .imagePointPx)
+        try container.encodeIfPresent(errorM, forKey: .errorM)
+        try container.encodeIfPresent(roleState, forKey: .roleState)
     }
 }
 
 extension EvidenceCorrection {
-    enum CodingKeys: String, CodingKey { case schemaVersion, id, sequence, entityId, actor, timestamp, reason, before, after }
+    enum CodingKeys: String, CodingKey { case schemaVersion, id, sequence, entityId, actor, timestamp, reason, before, after, entityType }
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(schemaVersion, forKey: .schemaVersion)
@@ -117,5 +120,6 @@ extension EvidenceCorrection {
         try container.encode(reason, forKey: .reason)
         try container.encode(before, forKey: .before)
         try container.encode(after, forKey: .after)
+        try container.encodeIfPresent(entityType, forKey: .entityType)
     }
 }

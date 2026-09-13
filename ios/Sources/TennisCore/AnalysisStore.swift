@@ -101,7 +101,7 @@ public final class AnalysisStore: @unchecked Sendable {
             graph.events.events.sort { ($0.start, $0.id) < ($1.start, $1.id) }
             graph.audit.append(EvidenceCorrection(schemaVersion: 1, id: UUID().uuidString, sequence: graph.audit.count + 1,
                 entityId: corrected.id, actor: "local-user", timestamp: ISO8601DateFormatter().string(from: Date()),
-                reason: "event review", before: before, after: corrected))
+                reason: "event review", before: before.map(CorrectedEntity.event), after: .event(corrected)))
             graph.metrics.metrics = []; graph.insights.insights = []
             try graph.validate(duration: duration)
             try sql("BEGIN IMMEDIATE")

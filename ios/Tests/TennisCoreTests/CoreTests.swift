@@ -3,6 +3,52 @@ import XCTest
 @testable import TennisCore
 
 final class CoreTests: XCTestCase {
+    func testMotionAtCutKeepsPriorRallyScene() throws {
+        var detector = TemporalEvents()
+        detector.rallyStart = 0; detector.lastObserved = 2; detector.observations = 6
+        var frame = FrameRecord(frame: 90, timestamp: 3)
+        frame.scene = 1; frame.cut = true; frame.cameraMoving = true
+        let events = detector.consume(frame)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.first?.scene, 0)
+        XCTAssertEqual(events.first?.end, 2)
+        XCTAssertNil(detector.rallyStart)
+    }
+    func testSharedEntityAuditReplayPreservesMaterializedMetrics() throws {
+        let source = fixture.appendingPathComponent("v3/full"), root = try temp()
+        let manifest = try PackageIO.load(source)
+        var graph = try EvidenceBundle.load(source)
+        graph.audit = try EvidenceBundle.readLines(EvidenceCorrection.self, fixture.appendingPathComponent("v3/entity-audit.jsonl"))
+        graph.rallies.rallies = [RallyEvidence(id: "rally-1", start: 1, end: 2, shotIds: ["shot-1"], reviewed: true, outcome: nil)]
+        graph.events.participants?.append(Participant(id: "opponent", name: "Opponent", role: "opponent"))
+        try graph.write(to: root, manifest: manifest)
+        let unchanged = try EvidenceBundle.load(root, manifest: manifest)
+        XCTAssertEqual(unchanged.events.participants, graph.events.participants)
+        XCTAssertEqual(unchanged.metrics, graph.metrics)
+        XCTAssertEqual(unchanged.insights, graph.insights)
+        try ContractJSON.write(RallyCollection(), to: root.appendingPathComponent(manifest.artifacts["rallies"]!))
+        let recovered = try EvidenceBundle.load(root, manifest: manifest)
+        XCTAssertEqual(recovered.rallies, graph.rallies)
+        XCTAssertTrue(recovered.metrics.metrics.isEmpty)
+    }
+    func testParticipantAuditRecoveryAndTypeValidation() throws {
+        let source = fixture.appendingPathComponent("v3/minimal"), root = try temp()
+        let manifest = try PackageIO.load(source)
+        var graph = try EvidenceBundle.load(source)
+        let person = Participant(id: "self", name: "Player", role: "self")
+        graph.events.participants = [person]
+        graph.audit = [EvidenceCorrection(schemaVersion: 1, id: "review-1", sequence: 1,
+            entityId: person.id, actor: "local-user", timestamp: "2026-09-12T00:00:00Z",
+            reason: "identify participant", before: nil, after: .participant(person), entityType: "participant")]
+        try graph.write(to: root, manifest: manifest)
+        var stale = graph.events; stale.participants = []
+        try ContractJSON.write(stale, to: root.appendingPathComponent(manifest.artifacts["events"]!))
+        let recovered = try EvidenceBundle.load(root, manifest: manifest)
+        XCTAssertEqual(recovered.events.participants, [person])
+        XCTAssertEqual(recovered.audit, graph.audit)
+        graph.audit[0].entityType = "event"
+        XCTAssertThrowsError(try graph.validate(duration: 5))
+    }
     func testV3SharedFixturesAndInvalidReferences() throws {
         for name in ["minimal", "uncertain", "corrected", "full"] {
             let root = fixture.appendingPathComponent("v3/\(name)")
@@ -29,7 +75,7 @@ final class CoreTests: XCTestCase {
         try store.export(to: root, manifest: manifest)
         let exported = try EvidenceBundle.load(root)
         XCTAssertEqual(exported.audit.count, 1)
-        XCTAssertEqual(exported.audit[0].before?.stroke, .unknown)
+        XCTAssertEqual(exported.audit[0].before?.event?.stroke, .unknown)
         XCTAssertEqual(exported.events.events[0].stroke, .backhand)
         let text = try String(contentsOf: root.appendingPathComponent("events.json"), encoding: .utf8)
         XCTAssertTrue(text.contains("\"confidence\":null"))
@@ -146,6 +192,17 @@ final class CoreTests: XCTestCase {
         XCTAssertThrowsError(try event.validate(duration:5))
         event.kind = .rally; XCTAssertThrowsError(try event.validate(duration:5))
         event.kind = .bounce; XCTAssertNoThrow(try event.validate(duration:5))
+    }
+    func testAutomaticBounceTurnDoesNotCreateGroundPosition() throws {
+        var detector = TemporalEvents()
+        let court = try Court(points: [[0,0],[100,0],[0,100],[100,100]])
+        var output: [AnalysisEvent] = []
+        for (i, point) in [[40.0,40.0],[41,50],[42,40]].enumerated() {
+            var frame = FrameRecord(frame: i, timestamp: Double(i) / 30, ball: Ball(status: .observed, xy: point, confidence: 0.9))
+            frame.court = court; output += detector.consume(frame)
+        }
+        XCTAssertEqual(output.first?.kind, .bounce)
+        XCTAssertNil(output.first?.position)
     }
     func testUnreviewedManualEventIsNotVerified() {
         var event=AnalysisEvent(kind:.hit,start:1); event.reviewed=false

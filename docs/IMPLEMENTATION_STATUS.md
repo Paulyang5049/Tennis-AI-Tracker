@@ -18,6 +18,17 @@ App Store release, a validated automatic stroke classifier or a phone accuracy r
   and default backup exclusion. Physical-device privacy acceptance remains pending.
 - Feature-branch CI uploads development-only test reports, wheel, contract/benchmark status
   and unsigned simulator build. Promotion readiness fails closed while evidence is missing.
+- Opt-in motion/overlay ball filtering, per-scene capture-quality summaries and conservative
+  Python player ground-position estimates. These are unvalidated candidates; the baseline
+  tracker remains the default. Missing calibration and ambiguous sides remain explicit.
+- Participant/assignment/rally audit replay in both runtimes, with shared recovery fixtures
+  and a desktop `review-entity` CLI. Native identity editing and track export integration
+  remain unfinished. Reopening an unchanged package preserves its derived metrics.
+
+The 2026-09-13 incremental batch passed 112 Python tests and 19 Swift tests. See
+[incremental evidence](data/development-2026-09-13.json). A partial independent review found
+an audit-order defect that has been fixed; other review agents did not finish because of
+usage limits. This batch is development progress, not completion of U2-U6 or release approval.
 
 The 2026-09-12 foundation batch passed 103 Python tests, 15 Swift tests, four Swift-to-Python
 fixture exports, wheel resource loading and an unsigned Xcode simulator build. See

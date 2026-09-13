@@ -33,6 +33,15 @@ MAX_BYTES = 32 * 1024 * 1024
 MAX_ROWS = 100_000
 
 
+def entity_rows(bundle, kind):
+    if kind == "rally":
+        return bundle["rallies"]["rallies"]
+    key = {"event": "events", "participant": "participants", "assignment": "assignments"}.get(kind)
+    if key is None:
+        raise ValueError("Unsupported correction entity")
+    return bundle["events"][key]
+
+
 def finite(value):
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
         raise ValueError("Evidence numbers must be finite")
@@ -198,11 +207,19 @@ def validate_evidence(bundle, duration):
         if not set(insight["event_ids"]).issubset(supported):
             raise ValueError("Insight evidence must support its metrics")
     indexed(bundle["audit"])
+    entity_indexes = {
+        "event": events,
+        "participant": participants,
+        "assignment": assignments,
+        "rally": indexed(bundle["rallies"]["rallies"]),
+    }
     for sequence, record in enumerate(bundle["audit"], 1):
+        kind = record.get("entity_type", "event")
+        entities = entity_indexes[kind]
         if (
             record["schema_version"] != 1
             or record["sequence"] != sequence
-            or record["entity_id"] not in events
+            or record["entity_id"] not in entities
         ):
             raise ValueError("Invalid append-only audit sequence or entity")
         if (
@@ -212,6 +229,17 @@ def validate_evidence(bundle, duration):
             or record["after"]["id"] != record["entity_id"]
         ):
             raise ValueError("Audit requires actor, reason, timestamp and matching entity")
+        marker = {
+            "event": "kind",
+            "participant": "role",
+            "assignment": "track_id",
+            "rally": "shot_ids",
+        }[kind]
+        if marker not in record["after"] or (
+            record["before"] is not None
+            and (marker not in record["before"] or record["before"]["id"] != record["entity_id"])
+        ):
+            raise ValueError("Audit payload does not match its entity type")
     for sample in bundle["tracks"]:
         if sample["schema_version"] != 1 or not 0 <= finite(sample["timestamp"]) <= duration:
             raise ValueError("Invalid track time or version")
@@ -255,22 +283,83 @@ def load_evidence(folder, manifest=None):
         for key in ("events", "rallies", "metrics", "insights", "tracks", "audit")
     }
     # Audit is the durable source of truth; materialized events may lag a crash.
-    original = indexed(bundle["events"]["events"])
-    events = deepcopy(original)
+    original = deepcopy((bundle["events"], bundle["rallies"]))
+    row_indexes = {
+        kind: {row["id"]: i for i, row in enumerate(entity_rows(bundle, kind))}
+        for kind in ("event", "participant", "assignment", "rally")
+    }
     for record in bundle["audit"]:
-        events[record["entity_id"]] = deepcopy(record["after"])
-    bundle["events"]["events"] = sorted(events.values(), key=lambda e: (e["start"], e["id"]))
-    if events != original:
+        validate_schema("audit-v1.schema.json", record)
+        kind = record.get("entity_type", "event")
+        rows = entity_rows(bundle, kind)
+        existing = row_indexes[kind].get(record["entity_id"])
+        if existing is None:
+            row_indexes[kind][record["entity_id"]] = len(rows)
+            rows.append(deepcopy(record["after"]))
+        else:
+            rows[existing] = deepcopy(record["after"])
+    bundle["events"]["events"].sort(key=lambda e: (e["start"], e["id"]))
+    if (bundle["events"], bundle["rallies"]) != original:
         bundle["metrics"]["metrics"] = []
         bundle["insights"]["insights"] = []
     return validate_evidence(bundle, manifest["media"]["duration"])
+
+
+def persist_review(folder, manifest, bundle, records):
+    """Caller holds run_lock. One fsynced append precedes all materializations."""
+    from tennis_ai.package import atomic_json
+
+    bundle["audit"].extend(records)
+    bundle["metrics"]["metrics"] = []
+    bundle["insights"]["insights"] = []
+    validate_evidence(bundle, manifest["media"]["duration"])
+    path = relative_asset(folder, manifest["artifacts"]["audit"])
+    with path.open("a") as stream:
+        for record in records:
+            stream.write(json.dumps(record, allow_nan=False) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    for key in ("events", "rallies", "metrics", "insights"):
+        atomic_json(relative_asset(folder, manifest["artifacts"][key]), bundle[key])
+
+
+def review_entity(folder, kind, value, *, actor="local-user", reason="identity or rally review"):
+    from tennis_ai.jobs import run_lock
+    from tennis_ai.package import load_manifest
+
+    if kind not in ("participant", "assignment", "rally"):
+        raise ValueError("Use the event review API for event corrections")
+    with run_lock(folder):
+        manifest = load_manifest(folder)
+        if manifest["status"] != "complete":
+            raise ValueError("Complete the analysis before reviewing identity or rallies")
+        bundle = load_evidence(folder, manifest)
+        rows = entity_rows(bundle, kind)
+        before = next((r for r in rows if r["id"] == value["id"]), None)
+        if before is not None:
+            rows.remove(before)
+        rows.append(deepcopy(value))
+        record = {
+            "schema_version": 1,
+            "entity_type": kind,
+            "id": uuid4().hex,
+            "sequence": len(bundle["audit"]) + 1,
+            "entity_id": value["id"],
+            "actor": actor,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "reason": reason,
+            "before": before,
+            "after": deepcopy(value),
+        }
+        persist_review(folder, manifest, bundle, [record])
+        return bundle
 
 
 def edit_evidence_event(folder, event_id, changes, *, actor="local-user", reason="event review"):
     """Append a durable full-record correction before materializing derived files."""
     from tennis_ai.events import new_event
     from tennis_ai.jobs import run_lock
-    from tennis_ai.package import atomic_json, load_manifest
+    from tennis_ai.package import load_manifest
 
     with run_lock(folder):
         manifest = load_manifest(folder)
@@ -329,16 +418,5 @@ def edit_evidence_event(folder, event_id, changes, *, actor="local-user", reason
             "before": before,
             "after": event,
         }
-        bundle["audit"].append(record)
-        # Derived claims are invalidated, never silently retained after evidence changes.
-        bundle["metrics"]["metrics"] = []
-        bundle["insights"]["insights"] = []
-        validate_evidence(bundle, manifest["media"]["duration"])
-        path = relative_asset(folder, manifest["artifacts"]["audit"])
-        with path.open("a") as stream:
-            stream.write(json.dumps(record, allow_nan=False) + "\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        for key in ("events", "metrics", "insights"):
-            atomic_json(relative_asset(folder, manifest["artifacts"][key]), bundle[key])
+        persist_review(folder, manifest, bundle, [record])
         return bundle["events"]

@@ -71,3 +71,14 @@ Canonical schemas live here; `scripts/sync_contract_schemas.py` generates the wh
 schema resource, and its `--check` mode detects drift. Swift exports are validated against
 the same Python schemas in branch CI. Imports bound evidence assets to 32 MiB / 100,000 rows,
 reject duplicate IDs, broken references, non-finite values and escaped/aliased asset paths.
+
+Audit entries may include `entity_type` (`event`, `participant`, `assignment`, `rally`);
+omission means `event` for existing logs. Replay replaces an existing entity in its original
+array slot and appends missing entities. Unchanged replay preserves derived results;
+recovered changes invalidate metrics and insights. `fixtures/v3/entity-audit.jsonl` is shared
+by Python and Swift recovery tests. `tennis-ai review-entity FOLDER KIND ENTITY.json`
+records a complete participant, assignment or rally correction with an optional `--reason`.
+
+`quality-v1.schema.json` describes capture eligibility heuristics, not measured accuracy.
+Player ground positions retain their ankle/box method, calibration identity and nullable
+error estimate. An `unknown` side or `ambiguous` role does not establish participant identity.

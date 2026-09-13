@@ -35,11 +35,36 @@ public struct PlayerPosition: Codable, Equatable, Sendable {
     public var schemaVersion: Int; public var timestamp: Double; public var scene: Int; public var trackId: Int
     public var side: String; public var positionCourtM: [Double]?; public var method: String?
     public var reviewed: Bool; public var calibrationId: String?
+    public var imagePointPx: [Double]? = nil; public var errorM: Double? = nil; public var roleState: String? = nil
+}
+public enum CorrectedEntity: Codable, Equatable, Sendable {
+    case event(AnalysisEvent), assignment(SceneRoleAssignment), participant(Participant), rally(RallyEvidence)
+    public var id: String {
+        switch self { case .event(let x): return x.id; case .assignment(let x): return x.id
+        case .participant(let x): return x.id; case .rally(let x): return x.id }
+    }
+    public var kind: String {
+        switch self { case .event: return "event"; case .assignment: return "assignment"
+        case .participant: return "participant"; case .rally: return "rally" }
+    }
+    public var event: AnalysisEvent? { if case .event(let value) = self { return value }; return nil }
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let value = try? container.decode(AnalysisEvent.self) { self = .event(value) }
+        else if let value = try? container.decode(SceneRoleAssignment.self) { self = .assignment(value) }
+        else if let value = try? container.decode(Participant.self) { self = .participant(value) }
+        else { self = .rally(try container.decode(RallyEvidence.self)) }
+    }
+    public func encode(to encoder: Encoder) throws {
+        switch self { case .event(let x): try x.encode(to: encoder); case .assignment(let x): try x.encode(to: encoder)
+        case .participant(let x): try x.encode(to: encoder); case .rally(let x): try x.encode(to: encoder) }
+    }
 }
 public struct EvidenceCorrection: Codable, Equatable, Identifiable, Sendable {
     public var schemaVersion: Int; public var id: String; public var sequence: Int; public var entityId: String
     public var actor: String; public var timestamp: String; public var reason: String
-    public var before: AnalysisEvent?; public var after: AnalysisEvent
+    public var before: CorrectedEntity?; public var after: CorrectedEntity
+    public var entityType: String? = nil
 }
 public struct RallyCollection: Codable, Equatable, Sendable {
     public var schemaVersion = 1; public var rallies: [RallyEvidence] = []
@@ -166,13 +191,24 @@ public struct EvidenceBundle: Codable, Equatable, Sendable {
         }
         _ = try Self.index(audit)
         for (i, record) in audit.enumerated() {
-            try Self.require(record.schemaVersion == 1 && record.sequence == i + 1 && eventIndex[record.entityId] != nil, "Invalid append-only audit sequence or entity")
+            let exists: Bool
+            switch record.after {
+            case .event: exists = eventIndex[record.entityId] != nil
+            case .participant: exists = people[record.entityId] != nil
+            case .assignment: exists = assignments.contains { $0.id == record.entityId }
+            case .rally: exists = rallies.rallies.contains { $0.id == record.entityId }
+            }
+            try Self.require(record.schemaVersion == 1 && record.sequence == i + 1 && exists, "Invalid append-only audit sequence or entity")
+            try Self.require((record.entityType ?? "event") == record.after.kind && (record.before == nil || (record.before?.kind == record.after.kind && record.before?.id == record.entityId)), "Audit entity type mismatch")
             try Self.require(!record.actor.isEmpty && !record.reason.isEmpty && !record.timestamp.isEmpty && record.after.id == record.entityId, "Audit requires actor, reason, timestamp and matching entity")
         }
         try Self.require(tracks.count <= Self.maxRows, "Track collection exceeds row limit")
         for sample in tracks {
-            try Self.require(sample.schemaVersion == 1 && sample.timestamp.isFinite && sample.timestamp >= 0 && sample.timestamp <= duration && sample.scene >= 0 && ["near", "far"].contains(sample.side), "Invalid track time, side or version")
+            try Self.require(sample.schemaVersion == 1 && sample.timestamp.isFinite && sample.timestamp >= 0 && sample.timestamp <= duration && sample.scene >= 0 && ["near", "far", "unknown"].contains(sample.side), "Invalid track time, side or version")
             try Self.point(sample.positionCourtM)
+            try Self.point(sample.imagePointPx)
+            if let error = sample.errorM { try Self.require(error.isFinite && error >= 0, "Invalid position error") }
+            if let state = sample.roleState { try Self.require(["candidate", "unknown", "ambiguous"].contains(state), "Invalid role state") }
             if sample.positionCourtM != nil { try Self.require(["ankles_homography", "box_bottom_homography"].contains(sample.method ?? "") && !(sample.calibrationId ?? "").isEmpty, "Player position needs ground-point method and calibration") }
         }
     }
@@ -205,8 +241,33 @@ public struct EvidenceBundle: Codable, Equatable, Sendable {
         bundle.audit = try readLines(EvidenceCorrection.self, asset("audit"))
         var events = try index(bundle.events.events)
         let original = events
-        for record in bundle.audit { events[record.entityId] = record.after }
-        if events != original { bundle.metrics.metrics = []; bundle.insights.insights = [] }
+        let originalPeople = bundle.events.participants, originalAssignments = bundle.events.assignments
+        let originalRallies = bundle.rallies
+        var people = bundle.events.participants ?? [], assignments = bundle.events.assignments ?? []
+        var rallies = bundle.rallies.rallies
+        _ = try index(people); _ = try index(assignments); _ = try index(rallies)
+        var peopleIndex = Dictionary(uniqueKeysWithValues: people.enumerated().map { ($0.element.id, $0.offset) })
+        var assignmentIndex = Dictionary(uniqueKeysWithValues: assignments.enumerated().map { ($0.element.id, $0.offset) })
+        var rallyIndex = Dictionary(uniqueKeysWithValues: rallies.enumerated().map { ($0.element.id, $0.offset) })
+        func replace<T: Identifiable>(_ value: T, rows: inout [T], positions: inout [String: Int]) where T.ID == String {
+            if let offset = positions[value.id] { rows[offset] = value }
+            else { positions[value.id] = rows.count; rows.append(value) }
+        }
+        for record in bundle.audit {
+            switch record.after {
+            case .event(let value): events[record.entityId] = value
+            case .participant(let value):
+                replace(value, rows: &people, positions: &peopleIndex)
+            case .assignment(let value):
+                replace(value, rows: &assignments, positions: &assignmentIndex)
+            case .rally(let value):
+                replace(value, rows: &rallies, positions: &rallyIndex)
+            }
+        }
+        if bundle.events.participants != nil { bundle.events.participants = people }
+        if bundle.events.assignments != nil { bundle.events.assignments = assignments }
+        bundle.rallies.rallies = rallies
+        if events != original || bundle.events.participants != originalPeople || bundle.events.assignments != originalAssignments || bundle.rallies != originalRallies { bundle.metrics.metrics = []; bundle.insights.insights = [] }
         bundle.events.events = events.values.sorted { ($0.start, $0.id) < ($1.start, $1.id) }
         try bundle.validate(duration: manifest.media.duration)
         return bundle

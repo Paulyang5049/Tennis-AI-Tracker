@@ -264,6 +264,14 @@
       "after"
     ],
     "properties": {
+      "entity_type": {
+        "enum": [
+          "event",
+          "assignment",
+          "participant",
+          "rally"
+        ]
+      },
       "schema_version": {
         "const": 1
       },
@@ -292,13 +300,35 @@
         "minLength": 1
       },
       "before": {
-        "type": [
-          "object",
-          "null"
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/$defs/entity"
+          }
         ]
       },
       "after": {
-        "type": "object"
+        "$ref": "#/$defs/entity"
+      }
+    },
+    "$defs": {
+      "entity": {
+        "oneOf": [
+          {
+            "$ref": "events-v2.schema.json#/$defs/event"
+          },
+          {
+            "$ref": "events-v3.schema.json#/properties/assignments/items"
+          },
+          {
+            "$ref": "events-v3.schema.json#/properties/participants/items"
+          },
+          {
+            "$ref": "rallies-v1.schema.json#/properties/rallies/items"
+          }
+        ]
       }
     },
     "additionalProperties": false
@@ -814,6 +844,73 @@
     },
     "additionalProperties": false
   },
+  "quality-v1.schema.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Per-frame capture eligibility, not recognition accuracy",
+    "type": "object",
+    "required": [
+      "schema_version",
+      "eligible_for_positions",
+      "court_visible",
+      "camera_moving",
+      "scene_cut",
+      "calibration_id",
+      "reasons"
+    ],
+    "properties": {
+      "schema_version": {
+        "const": 1
+      },
+      "eligible_for_positions": {
+        "type": "boolean"
+      },
+      "court_visible": {
+        "type": "boolean"
+      },
+      "camera_moving": {
+        "type": "boolean"
+      },
+      "scene_cut": {
+        "type": "boolean"
+      },
+      "calibration_id": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "calibration_age_s": {
+        "type": [
+          "number",
+          "null"
+        ],
+        "minimum": 0
+      },
+      "sharpness": {
+        "type": [
+          "number",
+          "null"
+        ],
+        "minimum": 0
+      },
+      "reasons": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "enum": [
+            "missing_calibration",
+            "invalid_calibration",
+            "court_out_of_view",
+            "camera_moving",
+            "scene_cut",
+            "stale_calibration",
+            "low_sharpness"
+          ]
+        }
+      }
+    },
+    "additionalProperties": false
+  },
   "rallies-v1.schema.json": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
@@ -913,7 +1010,8 @@
       "side": {
         "enum": [
           "near",
-          "far"
+          "far",
+          "unknown"
         ]
       },
       "position_court_m": {
@@ -943,6 +1041,31 @@
           "null"
         ],
         "minLength": 1
+      },
+      "image_point_px": {
+        "type": [
+          "array",
+          "null"
+        ],
+        "minItems": 2,
+        "maxItems": 2,
+        "items": {
+          "type": "number"
+        }
+      },
+      "error_m": {
+        "type": [
+          "number",
+          "null"
+        ],
+        "minimum": 0
+      },
+      "role_state": {
+        "enum": [
+          "candidate",
+          "ambiguous",
+          "unknown"
+        ]
       }
     },
     "additionalProperties": false

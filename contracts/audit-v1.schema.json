@@ -13,6 +13,7 @@
     "after"
   ],
   "properties": {
+    "entity_type": {"enum": ["event", "assignment", "participant", "rally"]},
     "schema_version": {
       "const": 1
     },
@@ -41,14 +42,19 @@
       "minLength": 1
     },
     "before": {
-      "type": [
-        "object",
-        "null"
-      ]
+      "anyOf": [{"type": "null"}, {"$ref": "#/$defs/entity"}]
     },
     "after": {
-      "type": "object"
+      "$ref": "#/$defs/entity"
     }
+  },
+  "$defs": {
+    "entity": {"oneOf": [
+      {"$ref": "events-v2.schema.json#/$defs/event"},
+      {"$ref": "events-v3.schema.json#/properties/assignments/items"},
+      {"$ref": "events-v3.schema.json#/properties/participants/items"},
+      {"$ref": "rallies-v1.schema.json#/properties/rallies/items"}
+    ]}
   },
   "additionalProperties": false
 }

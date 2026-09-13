@@ -8,6 +8,45 @@ from tennis_ai.evidence import load_evidence, validate_evidence
 FIXTURES = Path(__file__).resolve().parents[1] / "contracts/fixtures/v3"
 
 
+def test_shared_entity_audit_replay_is_idempotent(tmp_path):
+    import json
+    import shutil
+
+    shutil.copytree(FIXTURES / "full", tmp_path, dirs_exist_ok=True)
+    shutil.copyfile(FIXTURES / "entity-audit.jsonl", tmp_path / "corrections.jsonl")
+    recovered = load_evidence(tmp_path)
+    assert recovered["rallies"]["rallies"][0]["shot_ids"] == ["shot-1"]
+    recovered["events"]["participants"].append(
+        {"id": "opponent", "name": "Opponent", "role": "opponent"}
+    )
+    for key in ("events", "rallies"):
+        (tmp_path / f"{key}.json").write_text(json.dumps(recovered[key]))
+    # Restore valid derived results after materialization; replay must retain them.
+    again = load_evidence(tmp_path)
+    assert [p["id"] for p in again["events"]["participants"]] == ["self", "opponent"]
+    assert again["metrics"] == json.loads((FIXTURES / "full/metrics.json").read_text())
+
+
+def test_cli_identity_review_persists_audit(tmp_path, monkeypatch, capsys):
+    import json
+    import shutil
+
+    from tennis_ai.cli import main
+
+    folder = tmp_path / "match"
+    shutil.copytree(FIXTURES / "minimal", folder)
+    payload = tmp_path / "person.json"
+    person = {"id": "self", "name": "Player", "role": "self"}
+    payload.write_text(json.dumps(person))
+    monkeypatch.setattr(
+        "sys.argv", ["tennis-ai", "review-entity", str(folder), "participant", str(payload)]
+    )
+    main()
+    result = json.loads(capsys.readouterr().out)
+    assert result["events"]["participants"] == [person]
+    assert load_evidence(folder)["audit"][0]["entity_type"] == "participant"
+
+
 def test_packaged_schemas_match_canonical_contracts():
     import json
     from importlib.resources import files
@@ -81,3 +120,33 @@ def test_v3_review_is_audited_and_survives_crash_replay(tmp_path):
     assert load_evidence(target)["events"]["events"][0]["stroke"] == "backhand"
     edit_evidence_event(target, "shot-1", {"favorite": True}, actor="reviewer", reason="bookmark")
     assert [r["sequence"] for r in load_evidence(target)["audit"]] == [1, 2]
+
+
+def test_side_change_mapping_is_audited_and_preserves_identity(tmp_path):
+    import shutil
+
+    from tennis_ai.evidence import review_entity
+
+    folder = tmp_path / "match"
+    shutil.copytree(FIXTURES / "minimal", folder)
+    review_entity(folder, "participant", {"id": "self", "name": "Me", "role": "self"})
+    for entity_id, start, end, side in [("near", 0, 2, "near"), ("far", 2, 5, "far")]:
+        review_entity(
+            folder,
+            "assignment",
+            {
+                "id": entity_id,
+                "scene": 0,
+                "start": start,
+                "end": end,
+                "track_id": 1,
+                "side": side,
+                "participant_id": "self",
+                "reviewed": True,
+                "confidence": None,
+            },
+        )
+    graph = load_evidence(folder)
+    assert len(graph["audit"]) == 3
+    assert {a["participant_id"] for a in graph["events"]["assignments"]} == {"self"}
+    assert graph["events"]["assignments"][1]["side"] == "far"

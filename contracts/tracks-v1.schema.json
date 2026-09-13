@@ -30,7 +30,8 @@
     "side": {
       "enum": [
         "near",
-        "far"
+        "far",
+        "unknown"
       ]
     },
     "position_court_m": {
@@ -60,7 +61,10 @@
         "null"
       ],
       "minLength": 1
-    }
+    },
+    "image_point_px": {"type": ["array", "null"], "minItems": 2, "maxItems": 2, "items": {"type": "number"}},
+    "error_m": {"type": ["number", "null"], "minimum": 0},
+    "role_state": {"enum": ["candidate", "ambiguous", "unknown"]}
   },
   "additionalProperties": false
 }

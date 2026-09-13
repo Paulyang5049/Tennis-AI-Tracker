@@ -34,6 +34,12 @@ def test_interpolation_never_crosses_cut():
     assert result[1]["ball"]["status"] == "missing"
 
 
+def test_interpolation_never_crosses_camera_motion():
+    missing = {**record(0.03), "camera_moving": True}
+    result = list(interpolate([record(0, [0, 0]), missing, record(0.06, [6, 0])]))
+    assert result[1]["ball"]["status"] == "missing"
+
+
 def test_missing_stream_is_not_buffered():
     consumed = []
 
