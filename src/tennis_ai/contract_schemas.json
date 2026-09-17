@@ -269,7 +269,8 @@
           "event",
           "assignment",
           "participant",
-          "rally"
+          "rally",
+          "link"
         ]
       },
       "schema_version": {
@@ -324,6 +325,9 @@
           },
           {
             "$ref": "events-v3.schema.json#/properties/participants/items"
+          },
+          {
+            "$ref": "events-v3.schema.json#/properties/links/items"
           },
           {
             "$ref": "rallies-v1.schema.json#/properties/rallies/items"

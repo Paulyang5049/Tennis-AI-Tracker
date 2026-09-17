@@ -13,7 +13,7 @@
     "after"
   ],
   "properties": {
-    "entity_type": {"enum": ["event", "assignment", "participant", "rally"]},
+    "entity_type": {"enum": ["event", "assignment", "participant", "rally", "link"]},
     "schema_version": {
       "const": 1
     },
@@ -53,6 +53,7 @@
       {"$ref": "events-v2.schema.json#/$defs/event"},
       {"$ref": "events-v3.schema.json#/properties/assignments/items"},
       {"$ref": "events-v3.schema.json#/properties/participants/items"},
+      {"$ref": "events-v3.schema.json#/properties/links/items"},
       {"$ref": "rallies-v1.schema.json#/properties/rallies/items"}
     ]}
   },
