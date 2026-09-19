@@ -51,10 +51,10 @@ def main():
     event.add_argument("--id", help="Existing event id; omit to add a manual event")
     event.add_argument("--edit", help="Path to a JSON object of edited event fields")
     identity = commands.add_parser(
-        "review-entity", help="Review a v3 participant, side interval or rally"
+        "review-entity", help="Review a v3 participant, side interval, rally or shot-bounce link"
     )
     identity.add_argument("folder")
-    identity.add_argument("kind", choices=["participant", "assignment", "rally"])
+    identity.add_argument("kind", choices=["participant", "assignment", "rally", "link"])
     identity.add_argument(
         "json_file", help="Complete entity JSON; records an append-only correction"
     )

@@ -85,6 +85,7 @@ public struct Detection: Codable, Equatable, Sendable {
 }
 public struct Player: Codable, Equatable, Sendable {
     public var id: Int; public var box: [Double]; public var confidence: Double; public var label: String?; public var pose: [[Double]]?
+    public var courtPosition: PlayerPosition?
     public init(id: Int, box: [Double], confidence: Double) { self.id = id; self.box = box; self.confidence = confidence }
 }
 public struct Ball: Codable, Equatable, Sendable {
@@ -113,6 +114,14 @@ public struct FrameRecord: Codable, Equatable, Sendable {
         guard frame >= 0, timestamp.isFinite, timestamp >= 0 else { throw PackageError.invalid("Invalid frame timestamp") }
         for box in players.map(\.box) + rackets.map(\.box) + ballCandidates.map(\.box) {
             guard box.count == 4, box.allSatisfy(\.isFinite), box[2] >= box[0], box[3] >= box[1] else { throw PackageError.invalid("Invalid box") }
+        }
+        for player in players {
+            if let position = player.courtPosition {
+                try position.validate(duration: timestamp)
+                guard position.timestamp == timestamp, position.scene == scene, position.trackId == player.id else {
+                    throw PackageError.invalid("Player position must match its frame and track")
+                }
+            }
         }
         if let xy = ball.xy { guard xy.count == 2, xy.allSatisfy(\.isFinite) else { throw PackageError.invalid("Invalid ball point") } }
         guard (ball.status == .missing) == (ball.xy == nil) else { throw PackageError.invalid("Ball status and coordinates disagree") }

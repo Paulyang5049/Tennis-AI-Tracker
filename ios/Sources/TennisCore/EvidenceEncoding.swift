@@ -101,8 +101,8 @@ extension PlayerPosition {
         try container.encode(method, forKey: .method)
         try container.encode(reviewed, forKey: .reviewed)
         try container.encode(calibrationId, forKey: .calibrationId)
-        try container.encodeIfPresent(imagePointPx, forKey: .imagePointPx)
-        try container.encodeIfPresent(errorM, forKey: .errorM)
+        try container.encode(imagePointPx, forKey: .imagePointPx)
+        try container.encode(errorM, forKey: .errorM)
         try container.encodeIfPresent(roleState, forKey: .roleState)
     }
 }

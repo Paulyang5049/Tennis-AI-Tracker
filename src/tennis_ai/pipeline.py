@@ -182,7 +182,9 @@ def _analyze(
             raise ValueError("This model adapter does not support checkpoint restoration")
     else:
         try:
-            manifest = write_manifest(output, source, metadata, asdict(settings), provenance)
+            manifest = write_manifest(
+                output, source, metadata, asdict(settings), provenance, version=3
+            )
             if manifest["media"]["sha256"] != identity["source_sha256"]:
                 raise ValueError("Source changed during import")
             source = relative_asset(output, manifest["media"]["path"])
@@ -458,10 +460,26 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
         from tennis_ai.events import regenerate_events
 
         if manifest and manifest["schema_version"] == 3:
-            from tennis_ai.evidence import load_evidence
+            from tennis_ai.events import generate_candidates
+            from tennis_ai.evidence import load_evidence, persist_frame_tracks, validate_evidence
 
             # Rendering overlays does not replace the versioned review graph.
-            load_evidence(output, manifest)
+            bundle = load_evidence(output, manifest)
+            if (
+                manifest["status"] != "complete"
+                and not bundle["events"]["events"]
+                and not bundle["audit"]
+            ):
+                with relative_asset(output, artifacts["frames"]).open() as stream:
+                    bundle["events"]["events"] = list(
+                        generate_candidates(json.loads(line) for line in stream if line.strip())
+                    )
+                validate_evidence(bundle, manifest["media"]["duration"])
+                atomic_json(relative_asset(output, artifacts["events"]), bundle["events"])
+            with relative_asset(output, artifacts["frames"]).open() as stream:
+                persist_frame_tracks(
+                    output, manifest, (json.loads(line) for line in stream if line.strip())
+                )
         else:
             regenerate_events(
                 relative_asset(output, artifacts["frames"]),

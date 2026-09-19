@@ -36,7 +36,12 @@ MAX_ROWS = 100_000
 def entity_rows(bundle, kind):
     if kind == "rally":
         return bundle["rallies"]["rallies"]
-    key = {"event": "events", "participant": "participants", "assignment": "assignments"}.get(kind)
+    key = {
+        "event": "events",
+        "participant": "participants",
+        "assignment": "assignments",
+        "link": "links",
+    }.get(kind)
     if key is None:
         raise ValueError("Unsupported correction entity")
     return bundle["events"][key]
@@ -211,6 +216,7 @@ def validate_evidence(bundle, duration):
         "event": events,
         "participant": participants,
         "assignment": assignments,
+        "link": links,
         "rally": indexed(bundle["rallies"]["rallies"]),
     }
     for sequence, record in enumerate(bundle["audit"], 1):
@@ -233,6 +239,7 @@ def validate_evidence(bundle, duration):
             "event": "kind",
             "participant": "role",
             "assignment": "track_id",
+            "link": "shot_id",
             "rally": "shot_ids",
         }[kind]
         if marker not in record["after"] or (
@@ -286,7 +293,7 @@ def load_evidence(folder, manifest=None):
     original = deepcopy((bundle["events"], bundle["rallies"]))
     row_indexes = {
         kind: {row["id"]: i for i, row in enumerate(entity_rows(bundle, kind))}
-        for kind in ("event", "participant", "assignment", "rally")
+        for kind in ("event", "participant", "assignment", "rally", "link")
     }
     for record in bundle["audit"]:
         validate_schema("audit-v1.schema.json", record)
@@ -319,7 +326,8 @@ def persist_review(folder, manifest, bundle, records):
             stream.write(json.dumps(record, allow_nan=False) + "\n")
         stream.flush()
         os.fsync(stream.fileno())
-    for key in ("events", "rallies", "metrics", "insights"):
+    # Invalidate first: a crash must not leave old metrics beside new materializations.
+    for key in ("metrics", "insights", "events", "rallies"):
         atomic_json(relative_asset(folder, manifest["artifacts"][key]), bundle[key])
 
 
@@ -327,7 +335,7 @@ def review_entity(folder, kind, value, *, actor="local-user", reason="identity o
     from tennis_ai.jobs import run_lock
     from tennis_ai.package import load_manifest
 
-    if kind not in ("participant", "assignment", "rally"):
+    if kind not in ("participant", "assignment", "rally", "link"):
         raise ValueError("Use the event review API for event corrections")
     with run_lock(folder):
         manifest = load_manifest(folder)
@@ -336,6 +344,8 @@ def review_entity(folder, kind, value, *, actor="local-user", reason="identity o
         bundle = load_evidence(folder, manifest)
         rows = entity_rows(bundle, kind)
         before = next((r for r in rows if r["id"] == value["id"]), None)
+        if before == value:
+            return bundle
         if before is not None:
             rows.remove(before)
         rows.append(deepcopy(value))
@@ -353,6 +363,50 @@ def review_entity(folder, kind, value, *, actor="local-user", reason="identity o
         }
         persist_review(folder, manifest, bundle, [record])
         return bundle
+
+
+def persist_frame_tracks(folder, manifest, frames):
+    """Caller holds run_lock; refresh candidates without changing reviewed samples."""
+    import tempfile
+
+    from tennis_ai.package import atomic_json
+
+    bundle = load_evidence(folder, manifest)
+
+    def key(sample):
+        return sample["scene"], sample["track_id"], sample["timestamp"]
+
+    reviewed = {key(s): deepcopy(s) for s in bundle["tracks"] if s["reviewed"]}
+    candidates = {}
+    for frame in frames:
+        for player in frame.get("players", []):
+            sample = player.get("court_position")
+            if sample is not None:
+                sample = deepcopy(sample)
+                sample["reviewed"] = False
+                candidates[key(sample)] = sample
+    candidates.update(reviewed)
+    tracks = sorted(candidates.values(), key=key)
+    if tracks == bundle["tracks"]:
+        return bundle
+    bundle["tracks"] = tracks
+    bundle["metrics"]["metrics"] = []
+    bundle["insights"]["insights"] = []
+    validate_evidence(bundle, manifest["media"]["duration"])
+    for name in ("metrics", "insights"):
+        atomic_json(relative_asset(folder, manifest["artifacts"][name]), bundle[name])
+    path = relative_asset(folder, manifest["artifacts"]["tracks"])
+    descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=".tracks-")
+    try:
+        with os.fdopen(descriptor, "w") as stream:
+            for sample in tracks:
+                stream.write(json.dumps(sample, allow_nan=False) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    return bundle
 
 
 def edit_evidence_event(folder, event_id, changes, *, actor="local-user", reason="event review"):

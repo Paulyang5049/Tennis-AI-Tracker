@@ -88,6 +88,13 @@ def _save_correction(folder, frame, corners=None, labels=None):
             raise ValueError('Labels must be an object such as {"1": "Paul", "2": "Opponent"}')
         corrections.setdefault("labels", {})[str(record["scene"])] = labels
     atomic_json(path, corrections)
+    from tennis_ai.evidence import persist_frame_tracks
+    from tennis_ai.package import load_manifest
+
+    manifest = load_manifest(folder)
+    if manifest["schema_version"] == 3:
+        for key in ("metrics", "insights"):
+            atomic_json(folder / manifest["artifacts"][key], {"schema_version": 1, key: []})
     # Update review metadata immediately without running a model or re-encoding video.
     with connect(folder) as source, sqlite3.connect(folder / "review.sqlite") as target:
         for corrected in corrected_records(
@@ -99,3 +106,6 @@ def _save_correction(folder, frame, corners=None, labels=None):
             target.execute(
                 "UPDATE frames SET data=? WHERE idx=?", (json.dumps(corrected), corrected["frame"])
             )
+    if manifest["schema_version"] == 3:
+        with sqlite3.connect(folder / "review.sqlite") as source:
+            persist_frame_tracks(folder, manifest, rows(source))

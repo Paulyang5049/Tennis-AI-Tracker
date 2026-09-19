@@ -103,7 +103,9 @@ def test_edit_rerender_and_clip_do_not_run_inference(tmp_path):
         edit_event(output, event_id, {"end": 5})
     edit_event(output, event_id, {"excluded": True})
     assert statistics(output)["verified"]["rally"] == 0
-    assert json.loads((output / "corrections.json").read_text())["events"][event_id]["excluded"]
+    # New runs use the append-only v3 audit rather than the v2 correction map.
+    audit = [json.loads(line) for line in (output / "corrections.jsonl").read_text().splitlines()]
+    assert next(row for row in reversed(audit) if row["entity_id"] == event_id)["after"]["excluded"]
 
     from tennis_ai.evidence import load_evidence
     from tennis_ai.package import export_package

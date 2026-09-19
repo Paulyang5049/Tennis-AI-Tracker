@@ -34,7 +34,11 @@ def relative_asset(folder, name):
     return target
 
 
-def write_manifest(folder, source, metadata, settings, model_provenance, status="running"):
+def write_manifest(
+    folder, source, metadata, settings, model_provenance, status="running", *, version=2
+):
+    if version not in (2, 3):
+        raise ValueError("Unsupported package version")
     folder, source = Path(folder).resolve(), Path(source).resolve()
     folder.mkdir(parents=True, exist_ok=True, mode=0o700)
     if os.name == "posix":
@@ -65,9 +69,33 @@ def write_manifest(folder, source, metadata, settings, model_provenance, status=
             "corrections": "corrections.json",
         },
     }
+    if version == 3:
+        from tennis_ai.evidence import ASSET_VERSIONS, ASSETS
+
+        manifest.update(
+            schema_version=3,
+            court_coordinate_system="far_left_x_right_y_near_m",
+            asset_versions=ASSET_VERSIONS,
+            review_policy_version="human-reviewed-v1",
+            derivation_versions={},
+            storage_policy="local-no-backup-explicit-export",
+        )
+        manifest["artifacts"].update(ASSETS)
+        for key in ("rallies", "metrics", "insights"):
+            if not (folder / ASSETS[key]).exists():
+                atomic_json(folder / ASSETS[key], {"schema_version": 1, key: []})
+        for key in ("tracks", "audit"):
+            (folder / ASSETS[key]).touch(exist_ok=True)
     atomic_json(folder / "manifest.json", manifest)
     for name, value in (
-        ("events.json", {"schema_version": 2, "events": []}),
+        (
+            "events.json",
+            {
+                "schema_version": version,
+                "events": [],
+                **({"participants": [], "assignments": [], "links": []} if version == 3 else {}),
+            },
+        ),
         ("corrections.json", {"court": {}, "labels": {}}),
     ):
         if not (folder / name).exists():
@@ -263,7 +291,14 @@ def export_package(folder, destination, version=None):
                 for key in ("tracks", "audit"):
                     (temporary / ASSETS[key]).touch()
             atomic_json(temporary / "manifest.json", copied)
-            load_evidence(temporary, copied)
+            evidence = load_evidence(temporary, copied)
+            if not evidence["tracks"]:
+                from tennis_ai.evidence import persist_frame_tracks
+
+                with relative_asset(temporary, copied["artifacts"]["frames"]).open() as stream:
+                    persist_frame_tracks(
+                        temporary, copied, (json.loads(line) for line in stream if line.strip())
+                    )
         summary["source"] = str(destination / copied["media"]["path"])
         atomic_json(temporary / "summary.json", summary)
         if destination.exists():

@@ -7,19 +7,35 @@ public struct PackageMigration: Codable, Equatable, Sendable {
 }
 public struct Participant: Codable, Equatable, Identifiable, Sendable {
     public var id: String; public var name: String; public var role: String
+    public init(id: String, name: String, role: String) {
+        self.id = id; self.name = name; self.role = role
+    }
 }
 public struct SceneRoleAssignment: Codable, Equatable, Identifiable, Sendable {
     public var id: String; public var scene: Int; public var start: Double; public var end: Double
     public var trackId: Int; public var side: String; public var participantId: String?
     public var reviewed: Bool; public var confidence: Double?
+    public init(id: String, scene: Int, start: Double, end: Double, trackId: Int, side: String,
+                participantId: String? = nil, reviewed: Bool = false, confidence: Double? = nil) {
+        self.id = id; self.scene = scene; self.start = start; self.end = end; self.trackId = trackId
+        self.side = side; self.participantId = participantId; self.reviewed = reviewed; self.confidence = confidence
+    }
 }
 public struct ShotBounceLink: Codable, Equatable, Identifiable, Sendable {
     public var id: String; public var shotId: String; public var bounceId: String
     public var reviewed: Bool; public var confidence: Double?
+    public init(id: String, shotId: String, bounceId: String, reviewed: Bool = false, confidence: Double? = nil) {
+        self.id = id; self.shotId = shotId; self.bounceId = bounceId
+        self.reviewed = reviewed; self.confidence = confidence
+    }
 }
 public struct RallyEvidence: Codable, Equatable, Identifiable, Sendable {
     public var id: String; public var start: Double; public var end: Double
     public var shotIds: [String]; public var reviewed: Bool; public var outcome: String?
+    public init(id: String, start: Double, end: Double, shotIds: [String], reviewed: Bool = false, outcome: String? = nil) {
+        self.id = id; self.start = start; self.end = end; self.shotIds = shotIds
+        self.reviewed = reviewed; self.outcome = outcome
+    }
 }
 public struct EvidenceMetric: Codable, Equatable, Identifiable, Sendable {
     public var id: String; public var definition: String; public var version: String; public var view: String
@@ -36,16 +52,35 @@ public struct PlayerPosition: Codable, Equatable, Sendable {
     public var side: String; public var positionCourtM: [Double]?; public var method: String?
     public var reviewed: Bool; public var calibrationId: String?
     public var imagePointPx: [Double]? = nil; public var errorM: Double? = nil; public var roleState: String? = nil
+    public init(schemaVersion: Int = 1, timestamp: Double, scene: Int, trackId: Int, side: String,
+                positionCourtM: [Double]? = nil, method: String? = nil, reviewed: Bool = false,
+                calibrationId: String? = nil, imagePointPx: [Double]? = nil, errorM: Double? = nil, roleState: String? = nil) {
+        self.schemaVersion = schemaVersion; self.timestamp = timestamp; self.scene = scene; self.trackId = trackId
+        self.side = side; self.positionCourtM = positionCourtM; self.method = method; self.reviewed = reviewed
+        self.calibrationId = calibrationId; self.imagePointPx = imagePointPx; self.errorM = errorM; self.roleState = roleState
+    }
+    public func validate(duration: Double) throws {
+        try EvidenceBundle.require(schemaVersion == 1 && timestamp.isFinite && timestamp >= 0 && timestamp <= duration
+            && scene >= 0 && ["near", "far", "unknown"].contains(side), "Invalid track time, side or version")
+        try EvidenceBundle.point(positionCourtM); try EvidenceBundle.point(imagePointPx)
+        if let method { try EvidenceBundle.require(["ankles_homography", "box_bottom_homography"].contains(method), "Invalid position method") }
+        if let calibrationId { try EvidenceBundle.require(!calibrationId.isEmpty, "Empty calibration provenance") }
+        if let errorM { try EvidenceBundle.require(errorM.isFinite && errorM >= 0, "Invalid position error") }
+        if let roleState { try EvidenceBundle.require(["candidate", "unknown", "ambiguous"].contains(roleState), "Invalid role state") }
+        if positionCourtM != nil {
+            try EvidenceBundle.require(method != nil && calibrationId != nil, "Player position needs ground-point method and calibration")
+        }
+    }
 }
 public enum CorrectedEntity: Codable, Equatable, Sendable {
-    case event(AnalysisEvent), assignment(SceneRoleAssignment), participant(Participant), rally(RallyEvidence)
+    case event(AnalysisEvent), assignment(SceneRoleAssignment), participant(Participant), rally(RallyEvidence), link(ShotBounceLink)
     public var id: String {
         switch self { case .event(let x): return x.id; case .assignment(let x): return x.id
-        case .participant(let x): return x.id; case .rally(let x): return x.id }
+        case .participant(let x): return x.id; case .rally(let x): return x.id; case .link(let x): return x.id }
     }
     public var kind: String {
         switch self { case .event: return "event"; case .assignment: return "assignment"
-        case .participant: return "participant"; case .rally: return "rally" }
+        case .participant: return "participant"; case .rally: return "rally"; case .link: return "link" }
     }
     public var event: AnalysisEvent? { if case .event(let value) = self { return value }; return nil }
     public init(from decoder: Decoder) throws {
@@ -53,11 +88,13 @@ public enum CorrectedEntity: Codable, Equatable, Sendable {
         if let value = try? container.decode(AnalysisEvent.self) { self = .event(value) }
         else if let value = try? container.decode(SceneRoleAssignment.self) { self = .assignment(value) }
         else if let value = try? container.decode(Participant.self) { self = .participant(value) }
+        else if let value = try? container.decode(ShotBounceLink.self) { self = .link(value) }
         else { self = .rally(try container.decode(RallyEvidence.self)) }
     }
     public func encode(to encoder: Encoder) throws {
         switch self { case .event(let x): try x.encode(to: encoder); case .assignment(let x): try x.encode(to: encoder)
-        case .participant(let x): try x.encode(to: encoder); case .rally(let x): try x.encode(to: encoder) }
+        case .participant(let x): try x.encode(to: encoder); case .rally(let x): try x.encode(to: encoder)
+        case .link(let x): try x.encode(to: encoder) }
     }
 }
 public struct EvidenceCorrection: Codable, Equatable, Identifiable, Sendable {
@@ -143,6 +180,16 @@ public struct EvidenceBundle: Codable, Equatable, Sendable {
                 try Self.require(ordered[i-1].end <= ordered[i].start, "Overlapping track assignment intervals")
             }
         }
+        // One persistent participant cannot occupy overlapping tracks in the same scene.
+        let identities = Dictionary(grouping: assignments.filter { $0.participantId != nil }) {
+            "\($0.scene):\($0.participantId!)"
+        }
+        for group in identities.values {
+            let ordered = group.sorted { $0.start < $1.start }
+            for i in ordered.indices.dropFirst() {
+                try Self.require(ordered[i-1].end <= ordered[i].start, "Overlapping participant assignment intervals")
+            }
+        }
         for event in events.events {
             try event.validate(duration: duration); try Self.interval(event.start, event.end, duration)
             try Self.point(event.contactPointImagePx); try Self.point(event.hitterPositionCourtM); try Self.point(event.contactInterval)
@@ -197,6 +244,7 @@ public struct EvidenceBundle: Codable, Equatable, Sendable {
             case .participant: exists = people[record.entityId] != nil
             case .assignment: exists = assignments.contains { $0.id == record.entityId }
             case .rally: exists = rallies.rallies.contains { $0.id == record.entityId }
+            case .link: exists = events.links!.contains { $0.id == record.entityId }
             }
             try Self.require(record.schemaVersion == 1 && record.sequence == i + 1 && exists, "Invalid append-only audit sequence or entity")
             try Self.require((record.entityType ?? "event") == record.after.kind && (record.before == nil || (record.before?.kind == record.after.kind && record.before?.id == record.entityId)), "Audit entity type mismatch")
@@ -204,12 +252,7 @@ public struct EvidenceBundle: Codable, Equatable, Sendable {
         }
         try Self.require(tracks.count <= Self.maxRows, "Track collection exceeds row limit")
         for sample in tracks {
-            try Self.require(sample.schemaVersion == 1 && sample.timestamp.isFinite && sample.timestamp >= 0 && sample.timestamp <= duration && sample.scene >= 0 && ["near", "far", "unknown"].contains(sample.side), "Invalid track time, side or version")
-            try Self.point(sample.positionCourtM)
-            try Self.point(sample.imagePointPx)
-            if let error = sample.errorM { try Self.require(error.isFinite && error >= 0, "Invalid position error") }
-            if let state = sample.roleState { try Self.require(["candidate", "unknown", "ambiguous"].contains(state), "Invalid role state") }
-            if sample.positionCourtM != nil { try Self.require(["ankles_homography", "box_bottom_homography"].contains(sample.method ?? "") && !(sample.calibrationId ?? "").isEmpty, "Player position needs ground-point method and calibration") }
+            try sample.validate(duration: duration)
         }
     }
     static func boundedData(_ url: URL) throws -> Data {
@@ -243,8 +286,12 @@ public struct EvidenceBundle: Codable, Equatable, Sendable {
         let original = events
         let originalPeople = bundle.events.participants, originalAssignments = bundle.events.assignments
         let originalRallies = bundle.rallies
+        let originalLinks = bundle.events.links
         var people = bundle.events.participants ?? [], assignments = bundle.events.assignments ?? []
         var rallies = bundle.rallies.rallies
+        var links = bundle.events.links ?? []
+        _ = try index(links)
+        var linkIndex = Dictionary(uniqueKeysWithValues: links.enumerated().map { ($0.element.id, $0.offset) })
         _ = try index(people); _ = try index(assignments); _ = try index(rallies)
         var peopleIndex = Dictionary(uniqueKeysWithValues: people.enumerated().map { ($0.element.id, $0.offset) })
         var assignmentIndex = Dictionary(uniqueKeysWithValues: assignments.enumerated().map { ($0.element.id, $0.offset) })
@@ -262,12 +309,15 @@ public struct EvidenceBundle: Codable, Equatable, Sendable {
                 replace(value, rows: &assignments, positions: &assignmentIndex)
             case .rally(let value):
                 replace(value, rows: &rallies, positions: &rallyIndex)
+            case .link(let value):
+                replace(value, rows: &links, positions: &linkIndex)
             }
         }
         if bundle.events.participants != nil { bundle.events.participants = people }
         if bundle.events.assignments != nil { bundle.events.assignments = assignments }
+        if bundle.events.links != nil { bundle.events.links = links }
         bundle.rallies.rallies = rallies
-        if events != original || bundle.events.participants != originalPeople || bundle.events.assignments != originalAssignments || bundle.rallies != originalRallies { bundle.metrics.metrics = []; bundle.insights.insights = [] }
+        if events != original || bundle.events.participants != originalPeople || bundle.events.assignments != originalAssignments || bundle.rallies != originalRallies || bundle.events.links != originalLinks { bundle.metrics.metrics = []; bundle.insights.insights = [] }
         bundle.events.events = events.values.sorted { ($0.start, $0.id) < ($1.start, $1.id) }
         try bundle.validate(duration: manifest.media.duration)
         return bundle

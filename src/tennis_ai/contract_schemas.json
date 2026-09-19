@@ -982,6 +982,136 @@
     },
     "additionalProperties": false
   },
+  "review-report-v1.schema.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "schema_version",
+      "definition_version",
+      "view",
+      "input_digest",
+      "metrics"
+    ],
+    "properties": {
+      "schema_version": {
+        "const": 1
+      },
+      "definition_version": {
+        "const": "review-loop-v1"
+      },
+      "view": {
+        "enum": [
+          "assisted",
+          "human_verified"
+        ]
+      },
+      "participant_id": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "start": {
+        "type": "number",
+        "minimum": 0
+      },
+      "end": {
+        "type": "number",
+        "minimum": 0
+      },
+      "input_digest": {
+        "type": "string",
+        "minLength": 1
+      },
+      "metrics": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "id",
+            "value",
+            "sample_count",
+            "event_ids",
+            "support_refs",
+            "exclusions",
+            "points"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "value": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "sample_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "event_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            },
+            "support_refs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            },
+            "exclusions": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "reference",
+                  "timestamp",
+                  "position",
+                  "participant_id"
+                ],
+                "properties": {
+                  "reference": {
+                    "type": "string"
+                  },
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "position": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "participant_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "additionalProperties": false
+  },
   "tracks-v1.schema.json": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
