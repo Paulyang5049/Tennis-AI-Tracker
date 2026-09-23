@@ -663,6 +663,9 @@
             "reviewed": {
               "type": "boolean"
             },
+            "removed": {
+              "type": "boolean"
+            },
             "confidence": {
               "type": [
                 "number",
@@ -961,6 +964,9 @@
               "uniqueItems": true
             },
             "reviewed": {
+              "type": "boolean"
+            },
+            "removed": {
               "type": "boolean"
             },
             "outcome": {

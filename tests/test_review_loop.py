@@ -108,7 +108,8 @@ def test_analysis_export_and_rerender_preserve_review(tmp_path, monkeypatch):
     folder = tmp_path / "run"
     analyze(source, folder, tmp_path, model_factory=Models)
     assert load_manifest(folder)["schema_version"] == 3
-    assert len(load_evidence(folder)["tracks"]) == 3
+    assert len(load_evidence(folder)["tracks"]) == 1
+    assert len((folder / "frames.jsonl").read_text().splitlines()) == 3
     assert all(t["position_court_m"] is None for t in load_evidence(folder)["tracks"])
     edit_evidence_event(folder, "candidate", {"reviewed": True})
     before = load_evidence(folder)

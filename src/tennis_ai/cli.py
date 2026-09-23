@@ -59,6 +59,13 @@ def main():
         "json_file", help="Complete entity JSON; records an append-only correction"
     )
     identity.add_argument("--reason", default="manual review")
+    report = commands.add_parser("report", help="Export a media-free evidence review report")
+    report.add_argument("folder")
+    report.add_argument("--view", choices=["assisted", "human_verified"], default="assisted")
+    report.add_argument("--participant")
+    report.add_argument("--start", type=float, default=0.0)
+    report.add_argument("--end", type=float)
+    report.add_argument("--output", required=True)
     clip = commands.add_parser("clip", help="Export an original-video interval with audio")
     clip.add_argument("folder")
     clip.add_argument("--start", type=float, required=True)
@@ -104,6 +111,21 @@ def main():
                 cancel,
                 lambda f, m: print(f"{f:.0%}: {m}", flush=True),
             )
+        elif args.command == "report":
+            from tennis_ai.evidence import load_evidence
+            from tennis_ai.package import atomic_json, load_manifest
+            from tennis_ai.review_statistics import review_report
+
+            manifest = load_manifest(args.folder)
+            result = review_report(
+                load_evidence(args.folder, manifest),
+                view=args.view,
+                participant_id=args.participant,
+                start=args.start,
+                end=args.end if args.end is not None else manifest["media"]["duration"],
+            )
+            atomic_json(args.output, result)
+            print(args.output)
         elif args.command == "review-entity":
             from tennis_ai.evidence import read_bounded, review_entity
 

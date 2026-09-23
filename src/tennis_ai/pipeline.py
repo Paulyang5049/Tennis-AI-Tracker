@@ -339,7 +339,7 @@ def corrected_records(records, corrections, shape, limit):
     previous_scene = None
     selected_ids: set[int] = set()
     for record in records:
-        if record["scene"] != previous_scene or record.get("camera_moving"):
+        if record["scene"] != previous_scene or record.get("camera_moving") or record.get("cut"):
             active = None
         if record["scene"] != previous_scene:
             selected_ids.clear()
@@ -351,6 +351,9 @@ def corrected_records(records, corrections, shape, limit):
                 raise ValueError(f"Invalid court corners at frame {record['frame']}")
         if active is not None:
             record["court"] = active
+        elif corrections.get("court"):
+            # A manual override expires at movement/cuts until explicitly recalibrated.
+            record["court"] = None
         record["players"] = select_players(record["players"], record["court"], limit, selected_ids)
         selected_ids = {p["id"] for p in record["players"]}
         labels = corrections.get("labels", {}).get(str(record["scene"]), {})

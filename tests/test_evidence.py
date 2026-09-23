@@ -8,6 +8,142 @@ from tennis_ai.evidence import load_evidence, validate_evidence
 FIXTURES = Path(__file__).resolve().parents[1] / "contracts/fixtures/v3"
 
 
+def test_track_sampling_preserves_frames_and_bounds_summary(tmp_path, monkeypatch):
+    import json
+    import shutil
+
+    import tennis_ai.evidence as evidence
+    from tennis_ai.package import load_manifest
+
+    shutil.copytree(FIXTURES / "full", tmp_path, dirs_exist_ok=True)
+    manifest = load_manifest(tmp_path)
+    sample = json.loads((FIXTURES / "legacy-track.jsonl").read_text())
+    fixture = json.loads((FIXTURES / "track-sampling-v1.json").read_text())
+    frames = [
+        {"players": [{"court_position": dict(sample, timestamp=t)}]} for t in fixture["timestamps"]
+    ]
+    original = deepcopy(frames)
+    result = evidence.persist_frame_tracks(tmp_path, manifest, frames)
+    assert [s["timestamp"] for s in result["tracks"]] == fixture["retained"]
+    assert frames == original
+    assert (
+        load_manifest(tmp_path)["derivation_versions"]["automatic_track_sampling"]
+        == evidence.TRACK_SAMPLING_VERSION
+    )
+    before = (tmp_path / "tracks.jsonl").read_bytes()
+    monkeypatch.setattr(evidence, "MAX_ROWS", 3)
+    # Four selected rows exceed the bound; no existing asset is replaced.
+    with pytest.raises(ValueError, match="portable limits"):
+        evidence.persist_frame_tracks(
+            tmp_path,
+            manifest,
+            frames + [{"players": [{"court_position": dict(sample, timestamp=2)}]}],
+        )
+    assert (tmp_path / "tracks.jsonl").read_bytes() == before
+
+
+def test_long_match_sampling_is_portable(tmp_path):
+    import json
+    import shutil
+
+    from tennis_ai.evidence import persist_frame_tracks
+    from tennis_ai.package import atomic_json, load_manifest
+
+    shutil.copytree(FIXTURES / "full", tmp_path, dirs_exist_ok=True)
+    manifest = load_manifest(tmp_path)
+    manifest["media"]["duration"] = 1800
+    atomic_json(tmp_path / "manifest.json", manifest)
+    sample = json.loads((FIXTURES / "legacy-track.jsonl").read_text())
+    frames = (
+        {
+            "players": [
+                {"court_position": dict(sample, timestamp=i / 30, track_id=track)}
+                for track in (1, 2)
+            ]
+        }
+        for i in range(54_000)
+    )
+    graph = persist_frame_tracks(tmp_path, manifest, frames)
+    assert len(graph["tracks"]) == 7200
+    assert load_evidence(tmp_path) == graph
+
+
+def test_failed_audit_replace_keeps_match_reopenable(tmp_path, monkeypatch):
+    import shutil
+
+    from tennis_ai.evidence import review_entity
+
+    shutil.copytree(FIXTURES / "full", tmp_path, dirs_exist_ok=True)
+    before = load_evidence(tmp_path)
+    original_replace = __import__("os").replace
+
+    def fail_audit_replace(source, target):
+        if str(target).endswith("corrections.jsonl"):
+            raise OSError("injected audit write failure")
+        return original_replace(source, target)
+
+    monkeypatch.setattr("tennis_ai.evidence.os.replace", fail_audit_replace)
+    with pytest.raises(OSError, match="injected audit"):
+        review_entity(tmp_path, "participant", {"id": "self", "name": "Changed", "role": "self"})
+    assert load_evidence(tmp_path) == before
+    assert not list(tmp_path.glob(".audit-*"))
+
+
+def test_removed_links_and_rallies_allow_reviewed_shot_reclassification(tmp_path):
+    import json
+    import shutil
+
+    from tennis_ai.evidence import edit_evidence_event, review_entity
+    from tennis_ai.review_statistics import review_report
+
+    shutil.copytree(FIXTURES / "full", tmp_path, dirs_exist_ok=True)
+    graph = load_evidence(tmp_path)
+    link = dict(graph["events"]["links"][0], reviewed=False, removed=True)
+    review_entity(tmp_path, "link", link, reason="remove wrong link")
+    rally = {
+        "id": "wrong-rally",
+        "start": 1,
+        "end": 1,
+        "shot_ids": ["shot-1"],
+        "reviewed": True,
+        "outcome": None,
+    }
+    review_entity(tmp_path, "rally", rally, reason="create rally")
+    review_entity(
+        tmp_path, "rally", dict(rally, reviewed=False, removed=True), reason="remove wrong rally"
+    )
+    edit_evidence_event(
+        tmp_path,
+        "shot-1",
+        {"kind": "bounce", "contact_point_image_px": None, "hitter_position_court_m": None},
+    )
+    edited = load_evidence(tmp_path)
+    assert next(e for e in edited["events"]["events"] if e["id"] == "shot-1")["kind"] == "bounce"
+    assert (
+        next(
+            r
+            for r in review_report(edited, view="human_verified", end=5)["metrics"]
+            if r["id"] == "hits"
+        )["value"]
+        is None
+    )
+    stale = json.loads((tmp_path / "events.json").read_text())
+    stale["links"] = graph["events"]["links"]
+    (tmp_path / "events.json").write_text(json.dumps(stale))
+    assert load_evidence(tmp_path) == edited
+
+
+def test_shared_removed_link_audit_replays(tmp_path):
+    import shutil
+
+    shutil.copytree(FIXTURES / "full", tmp_path, dirs_exist_ok=True)
+    shutil.copyfile(FIXTURES / "removed-associations-audit.jsonl", tmp_path / "corrections.jsonl")
+    graph = load_evidence(tmp_path)
+    assert graph["events"]["links"][0]["removed"] is True
+    assert graph["metrics"]["metrics"] == []
+    assert load_evidence(tmp_path) == graph
+
+
 def test_shared_entity_audit_replay_is_idempotent(tmp_path):
     import json
     import shutil
@@ -90,6 +226,17 @@ def test_audit_fixture_retains_before_after():
     bundle = load_evidence(FIXTURES / "corrected")
     assert bundle["audit"][0]["before"]["stroke"] == "unknown"
     assert bundle["audit"][0]["after"]["stroke"] == "forehand"
+
+
+def test_participant_cannot_occupy_two_tracks_at_once():
+    import json
+
+    bundle = deepcopy(load_evidence(FIXTURES / "full"))
+    bundle["events"]["assignments"] = json.loads(
+        (FIXTURES / "overlapping-participant-assignments.json").read_text()
+    )
+    with pytest.raises(ValueError, match="Overlapping participant"):
+        validate_evidence(bundle, 5)
 
 
 def test_v3_manifest_can_be_loaded_without_migration():

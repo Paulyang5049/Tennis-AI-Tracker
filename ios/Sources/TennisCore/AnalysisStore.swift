@@ -14,10 +14,20 @@ public final class AnalysisStore: @unchecked Sendable {
             try sql("CREATE TABLE IF NOT EXISTS frames(frame INTEGER PRIMARY KEY, timestamp REAL NOT NULL UNIQUE, payload BLOB NOT NULL)")
             try sql("CREATE INDEX IF NOT EXISTS frames_time ON frames(timestamp)")
             try sql("CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY, start REAL NOT NULL, payload BLOB NOT NULL)")
+            try sql("CREATE TABLE IF NOT EXISTS track_samples(sequence INTEGER PRIMARY KEY, bucket TEXT NOT NULL, payload BLOB NOT NULL)")
+            try sql("CREATE INDEX IF NOT EXISTS track_buckets ON track_samples(bucket)")
             if let old: ResumeIdentity = try metadata("identity") {
                 guard old == identity else { throw PackageError.incompatibleResume }
             } else {
                 try setMetadata("identity", identity); try setMetadata("state",RuntimeState()); try setMetadata("status",AnalysisStatus.paused)
+            }
+            if try metadata("trackAccounting") as TrackAccounting? == nil {
+                try sql("BEGIN IMMEDIATE")
+                do {
+                    if let graph: EvidenceBundle = try metadata("evidence") { try writeEvidence(graph) }
+                    else { try setMetadata("trackAccounting", TrackAccounting()) }
+                    try sql("COMMIT")
+                } catch { try? sql("ROLLBACK"); throw error }
             }
         } catch { sqlite3_close(db); db=nil; throw error }
     }
@@ -49,6 +59,51 @@ public final class AnalysisStore: @unchecked Sendable {
             bind(key,to:s,at:1); bind(try ContractJSON.encoder().encode(value),to:s,at:2); try done(s)
         }
     }
+    private struct TrackAccounting: Codable { var rows = 0; var bytes = 0 }
+    private func appendTracks(_ samples: [PlayerPosition], preserveAll: Bool = false) throws -> Bool {
+        var accounting: TrackAccounting = try metadata("trackAccounting") ?? TrackAccounting()
+        let originalCount = accounting.rows
+        for sample in samples {
+            let bucket = try TrackSummaryBuilder.bucket(sample)
+            if !preserveAll {
+                let exists = try statement("SELECT 1 FROM track_samples WHERE bucket=? LIMIT 1") { s in
+                    bind(bucket, to: s, at: 1)
+                    let code = sqlite3_step(s)
+                    guard code == SQLITE_ROW || code == SQLITE_DONE else { throw failure() }
+                    return code == SQLITE_ROW
+                }
+                if exists { continue }
+            }
+            let data = try ContractJSON.encoder().encode(sample)
+            accounting.rows += 1; accounting.bytes += data.count + 1
+            try EvidenceBundle.require(accounting.rows <= EvidenceBundle.maxRows && accounting.bytes <= EvidenceBundle.maxBytes, "Track summary exceeds portable limits")
+            try statement("INSERT INTO track_samples(bucket,payload) VALUES(?,?)") { s in
+                bind(bucket, to: s, at: 1); bind(data, to: s, at: 2); try done(s)
+            }
+        }
+        if accounting.rows != originalCount { try setMetadata("trackAccounting", accounting) }
+        return accounting.rows != originalCount
+    }
+    private func readEvidence() throws -> EvidenceBundle? {
+        guard var graph: EvidenceBundle = try metadata("evidence") else { return nil }
+        graph.tracks = try statement("SELECT payload FROM track_samples ORDER BY sequence") { s in
+            var rows: [PlayerPosition] = [], code = sqlite3_step(s)
+            while code == SQLITE_ROW {
+                rows.append(try ContractJSON.decoder().decode(PlayerPosition.self, from: rowData(s, column: 0)))
+                code = sqlite3_step(s)
+            }
+            guard code == SQLITE_DONE else { throw failure() }; return rows
+        }
+        return graph
+    }
+    /// Call inside a transaction. Whole replacements occur only on import or review edits.
+    private func writeEvidence(_ graph: EvidenceBundle) throws {
+        try sql("DELETE FROM track_samples")
+        try setMetadata("trackAccounting", TrackAccounting())
+        _ = try appendTracks(graph.tracks, preserveAll: true)
+        var header = graph; header.tracks = []
+        try setMetadata("evidence", header)
+    }
     public func state()throws->RuntimeState { try synchronized { try metadata("state") ?? RuntimeState() } }
     public func status()throws->AnalysisStatus { try synchronized { try metadata("status") ?? .paused } }
     public func setStatus(_ value:AnalysisStatus)throws { try synchronized { try setMetadata("status",value) } }
@@ -59,28 +114,31 @@ public final class AnalysisStore: @unchecked Sendable {
             do {
                 let previous = try corrections()
                 try setMetadata("corrections", value)
-                if previous != value, var graph: EvidenceBundle = try metadata("evidence") {
+                if previous != value, var graph = try readEvidence() {
                     graph.metrics.metrics = []; graph.insights.insights = []
                     if previous.court != value.court {
                         let reviewed = graph.tracks.filter(\.reviewed)
-                        let keys = Set(reviewed.map { "\($0.scene):\($0.trackId):\($0.timestamp)" })
-                        var positions: [PlayerPosition] = []
+                        var summary = try TrackSummaryBuilder(existing: reviewed)
+                        var activeCourt: Court?, previousScene: Int?
                         try statement("SELECT payload FROM frames ORDER BY frame") { s in
                             var code = sqlite3_step(s)
                             while code == SQLITE_ROW {
                                 var frame = try ContractJSON.decoder().decode(FrameRecord.self, from: rowData(s, column: 0))
-                                // Do not carry a manual calibration across an imported scene cut.
-                                frame.court = frame.scene == 0 ? try value.latestCourt(at: frame.frame) : nil
-                                positions += frame.players.map { PlayerPositionEstimator.sample(player: $0, frame: frame) }.filter {
-                                    !keys.contains("\($0.scene):\($0.trackId):\($0.timestamp)")
+                                if previousScene != frame.scene || frame.cameraMoving || frame.cut { activeCourt = nil }
+                                previousScene = frame.scene
+                                if let points = value.court[String(frame.frame)] { activeCourt = try Court(points: points) }
+                                frame.court = activeCourt
+                                for player in frame.players {
+                                    try summary.append(PlayerPositionEstimator.sample(player: player, frame: frame))
                                 }
                                 code = sqlite3_step(s)
                             }
                             guard code == SQLITE_DONE else { throw failure() }
                         }
-                        graph.tracks = reviewed + positions
+                        graph.tracks = summary.samples
+                        try setMetadata("automaticTrackSampling", TrackSummaryBuilder.version)
                     }
-                    try setMetadata("evidence", graph)
+                    try writeEvidence(graph)
                 }
                 try sql("COMMIT")
             } catch { try? sql("ROLLBACK"); throw error }
@@ -105,15 +163,12 @@ public final class AnalysisStore: @unchecked Sendable {
                 for event in events { try putEvent(event,preserveReviewed:true) }
                 if var graph: EvidenceBundle = try metadata("evidence") {
                     let savedEvents = try self.events()
-                    var known = Set(graph.tracks.map { "\($0.scene):\($0.trackId):\($0.timestamp)" })
-                    let positions = frames.flatMap { $0.players.compactMap(\.courtPosition) }.filter {
-                        known.insert("\($0.scene):\($0.trackId):\($0.timestamp)").inserted
-                    }
-                    if graph.events.events != savedEvents || !positions.isEmpty {
+                    let tracksChanged = try appendTracks(frames.flatMap { $0.players.compactMap(\.courtPosition) })
+                    if graph.events.events != savedEvents || tracksChanged {
                         graph.events.events = savedEvents
-                        graph.tracks.append(contentsOf: positions)
                         graph.metrics.metrics = []; graph.insights.insights = []
                         try setMetadata("evidence", graph)
+                        try setMetadata("automaticTrackSampling", TrackSummaryBuilder.version)
                     }
                 }
                 try setMetadata("state",state); try setMetadata("status",status); try sql("COMMIT")
@@ -185,6 +240,7 @@ public final class AnalysisStore: @unchecked Sendable {
                     case .rally(let value):
                         before = replace(value, in: &graph.rallies.rallies).map(CorrectedEntity.rally)
                     }
+                    if before == entity { continue }
                     graph.audit.append(EvidenceCorrection(schemaVersion: 1, id: UUID().uuidString,
                         sequence: graph.audit.count + 1, entityId: entity.id, actor: actor,
                         timestamp: ISO8601DateFormatter().string(from: Date()), reason: reason,
@@ -194,15 +250,15 @@ public final class AnalysisStore: @unchecked Sendable {
                 graph.metrics.metrics = []; graph.insights.insights = []
                 try graph.validate(duration: duration)
                 for event in graph.events.events { try putEvent(event, preserveReviewed: false) }
-                try setMetadata("evidence", graph); try sql("COMMIT")
+                try writeEvidence(graph); try sql("COMMIT")
             } catch { try? sql("ROLLBACK"); throw error }
         }
     }
-    public func evidence() throws -> EvidenceBundle? { try synchronized { try metadata("evidence") } }
+    public func evidence() throws -> EvidenceBundle? { try synchronized { try readEvidence() } }
     /// Returns a value snapshot. Older stores are projected into v3 without modifying the database.
     public func evidenceSnapshot() throws -> EvidenceBundle {
         try synchronized {
-            if let graph: EvidenceBundle = try metadata("evidence") { return graph }
+            if let graph = try readEvidence() { return graph }
             var graph = EvidenceBundle.migrating(events: try events())
             graph.tracks = try framePositions()
             return graph
@@ -210,15 +266,14 @@ public final class AnalysisStore: @unchecked Sendable {
     }
     private func framePositions() throws -> [PlayerPosition] {
         try statement("SELECT payload FROM frames ORDER BY frame") { s in
-            var positions: [PlayerPosition] = [], code = sqlite3_step(s)
+            var summary = try TrackSummaryBuilder(), code = sqlite3_step(s)
             while code == SQLITE_ROW {
                 let frame = try ContractJSON.decoder().decode(FrameRecord.self, from: rowData(s, column: 0))
-                positions.append(contentsOf: frame.players.compactMap(\.courtPosition))
-                try EvidenceBundle.require(positions.count <= EvidenceBundle.maxRows, "Track collection exceeds row limit")
+                for position in frame.players.compactMap(\.courtPosition) { try summary.append(position) }
                 code = sqlite3_step(s)
             }
             guard code == SQLITE_DONE else { throw failure() }
-            return positions
+            return summary.samples
         }
     }
     public func importEvidence(_ graph: EvidenceBundle, duration: Double) throws {
@@ -227,18 +282,17 @@ public final class AnalysisStore: @unchecked Sendable {
             try sql("BEGIN IMMEDIATE")
             do {
                 var graph = graph
-                var known = Set(graph.tracks.map { "\($0.scene):\($0.trackId):\($0.timestamp)" })
-                let positions = try framePositions().filter {
-                    known.insert("\($0.scene):\($0.trackId):\($0.timestamp)").inserted
-                }
-                if !positions.isEmpty {
-                    graph.tracks.append(contentsOf: positions)
+                var summary = try TrackSummaryBuilder(existing: graph.tracks)
+                for position in try framePositions() { try summary.append(position) }
+                if summary.samples.count != graph.tracks.count {
+                    graph.tracks = summary.samples
                     graph.metrics.metrics = []; graph.insights.insights = []
+                    try setMetadata("automaticTrackSampling", TrackSummaryBuilder.version)
                 }
                 try graph.validate(duration: duration)
                 try sql("DELETE FROM events")
                 for event in graph.events.events { try putEvent(event, preserveReviewed: false) }
-                try setMetadata("evidence", graph); try sql("COMMIT")
+                try writeEvidence(graph); try sql("COMMIT")
             } catch { try? sql("ROLLBACK"); throw error }
         }
     }
@@ -278,6 +332,10 @@ public final class AnalysisStore: @unchecked Sendable {
     public func export(to root:URL,manifest:Manifest)throws {
         try manifest.validate()
         try synchronized {
+            var manifest = manifest
+            if manifest.schemaVersion == 3, let policy: String = try metadata("automaticTrackSampling") {
+                manifest.derivationVersions?["automatic_track_sampling"] = policy
+            }
             let target=try PackageIO.asset(manifest.artifacts["frames"]!,in:root)
             let temporary=target.appendingPathExtension("pending")
             FileManager.default.createFile(atPath:temporary.path,contents:nil)

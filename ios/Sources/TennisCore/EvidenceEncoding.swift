@@ -46,7 +46,7 @@ extension SceneRoleAssignment {
 }
 
 extension ShotBounceLink {
-    enum CodingKeys: String, CodingKey { case id, shotId, bounceId, reviewed, confidence }
+    enum CodingKeys: String, CodingKey { case id, shotId, bounceId, reviewed, confidence, removed }
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
@@ -54,11 +54,12 @@ extension ShotBounceLink {
         try container.encode(bounceId, forKey: .bounceId)
         try container.encode(reviewed, forKey: .reviewed)
         try container.encode(confidence, forKey: .confidence)
+        try container.encodeIfPresent(removed, forKey: .removed)
     }
 }
 
 extension RallyEvidence {
-    enum CodingKeys: String, CodingKey { case id, start, end, shotIds, reviewed, outcome }
+    enum CodingKeys: String, CodingKey { case id, start, end, shotIds, reviewed, outcome, removed }
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
@@ -67,6 +68,7 @@ extension RallyEvidence {
         try container.encode(shotIds, forKey: .shotIds)
         try container.encode(reviewed, forKey: .reviewed)
         try container.encode(outcome, forKey: .outcome)
+        try container.encodeIfPresent(removed, forKey: .removed)
     }
 }
 

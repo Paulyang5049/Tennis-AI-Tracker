@@ -208,6 +208,9 @@
           "reviewed": {
             "type": "boolean"
           },
+          "removed": {
+            "type": "boolean"
+          },
           "confidence": {
             "type": [
               "number",

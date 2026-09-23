@@ -24,6 +24,7 @@ public struct SceneRoleAssignment: Codable, Equatable, Identifiable, Sendable {
 public struct ShotBounceLink: Codable, Equatable, Identifiable, Sendable {
     public var id: String; public var shotId: String; public var bounceId: String
     public var reviewed: Bool; public var confidence: Double?
+    public var removed: Bool? = nil
     public init(id: String, shotId: String, bounceId: String, reviewed: Bool = false, confidence: Double? = nil) {
         self.id = id; self.shotId = shotId; self.bounceId = bounceId
         self.reviewed = reviewed; self.confidence = confidence
@@ -32,6 +33,7 @@ public struct ShotBounceLink: Codable, Equatable, Identifiable, Sendable {
 public struct RallyEvidence: Codable, Equatable, Identifiable, Sendable {
     public var id: String; public var start: Double; public var end: Double
     public var shotIds: [String]; public var reviewed: Bool; public var outcome: String?
+    public var removed: Bool? = nil
     public init(id: String, start: Double, end: Double, shotIds: [String], reviewed: Bool = false, outcome: String? = nil) {
         self.id = id; self.start = start; self.end = end; self.shotIds = shotIds
         self.reviewed = reviewed; self.outcome = outcome
@@ -206,6 +208,7 @@ public struct EvidenceBundle: Codable, Equatable, Sendable {
             }
         }
         for link in events.links! {
+            if link.removed == true { try Self.require(!link.reviewed, "Removed link cannot be reviewed"); continue }
             try Self.references([link.shotId, link.bounceId], eventIndex)
             let hit = eventIndex[link.shotId]!, bounce = eventIndex[link.bounceId]!
             try Self.require(hit.kind == .hit && bounce.kind == .bounce && hit.scene == bounce.scene && hit.start <= bounce.start, "Invalid shot-bounce association")
@@ -215,6 +218,7 @@ public struct EvidenceBundle: Codable, Equatable, Sendable {
         try Self.require(rallies.schemaVersion == 1 && metrics.schemaVersion == 1 && insights.schemaVersion == 1, "Unsupported derived asset version")
         _ = try Self.index(rallies.rallies); let metricIndex = try Self.index(metrics.metrics); _ = try Self.index(insights.insights)
         for rally in rallies.rallies {
+            if rally.removed == true { try Self.require(!rally.reviewed, "Removed rally cannot be reviewed"); continue }
             try Self.interval(rally.start, rally.end, duration); try Self.references(rally.shotIds, eventIndex)
             let shots = rally.shotIds.map { eventIndex[$0]! }, times = shots.map(\.start)
             try Self.require(times == times.sorted() && shots.allSatisfy { $0.kind == .hit && $0.start >= rally.start && $0.start <= rally.end }, "Rally shots must be ordered contained hits")

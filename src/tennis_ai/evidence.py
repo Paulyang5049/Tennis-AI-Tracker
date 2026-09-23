@@ -3,6 +3,7 @@
 import json
 import math
 import os
+import tempfile
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,6 +32,7 @@ ASSETS = {
 }
 MAX_BYTES = 32 * 1024 * 1024
 MAX_ROWS = 100_000
+TRACK_SAMPLING_VERSION = "candidate-first-per-half-second-v1"
 
 
 def entity_rows(bundle, kind):
@@ -126,6 +128,17 @@ def validate_evidence(bundle, duration):
     for a, b in zip(assigned, assigned[1:]):
         if a["scene"] == b["scene"] and a["track_id"] == b["track_id"] and a["end"] > b["start"]:
             raise ValueError("Overlapping track assignment intervals")
+    identities = sorted(
+        (a for a in assignments.values() if a["participant_id"] is not None),
+        key=lambda a: (a["scene"], a["participant_id"], a["start"]),
+    )
+    for a, b in zip(identities, identities[1:]):
+        if (
+            a["scene"] == b["scene"]
+            and a["participant_id"] == b["participant_id"]
+            and a["end"] > b["start"]
+        ):
+            raise ValueError("Overlapping participant assignment intervals")
     for event in events.values():
         validate_event(event)
         interval(event, duration)
@@ -161,6 +174,10 @@ def validate_evidence(bundle, duration):
             if len(matches) != 1 or (event["reviewed"] and not matches[0]["reviewed"]):
                 raise ValueError("Participant event requires an unambiguous matching assignment")
     for link in links.values():
+        if link.get("removed", False):
+            if link["reviewed"]:
+                raise ValueError("Removed link cannot be reviewed")
+            continue
         references([link["shot_id"], link["bounce_id"]], events)
         hit, bounce = events[link["shot_id"]], events[link["bounce_id"]]
         if (
@@ -178,6 +195,10 @@ def validate_evidence(bundle, duration):
             raise ValueError("Unsupported derived asset version")
         indexed(bundle[key][key])
     for rally in bundle["rallies"]["rallies"]:
+        if rally.get("removed", False):
+            if rally["reviewed"]:
+                raise ValueError("Removed rally cannot be reviewed")
+            continue
         interval(rally, duration)
         references(rally["shot_ids"], events)
         times = [events[e]["start"] for e in rally["shot_ids"]]
@@ -313,7 +334,7 @@ def load_evidence(folder, manifest=None):
 
 
 def persist_review(folder, manifest, bundle, records):
-    """Caller holds run_lock. One fsynced append precedes all materializations."""
+    """Caller holds run_lock. Atomically publish audit before materializations."""
     from tennis_ai.package import atomic_json
 
     bundle["audit"].extend(records)
@@ -321,11 +342,16 @@ def persist_review(folder, manifest, bundle, records):
     bundle["insights"]["insights"] = []
     validate_evidence(bundle, manifest["media"]["duration"])
     path = relative_asset(folder, manifest["artifacts"]["audit"])
-    with path.open("a") as stream:
-        for record in records:
-            stream.write(json.dumps(record, allow_nan=False) + "\n")
-        stream.flush()
-        os.fsync(stream.fileno())
+    descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=".audit-")
+    try:
+        with os.fdopen(descriptor, "w") as stream:
+            for record in bundle["audit"]:
+                stream.write(json.dumps(record, allow_nan=False) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
     # Invalidate first: a crash must not leave old metrics beside new materializations.
     for key in ("metrics", "insights", "events", "rallies"):
         atomic_json(relative_asset(folder, manifest["artifacts"][key]), bundle[key])
@@ -347,8 +373,9 @@ def review_entity(folder, kind, value, *, actor="local-user", reason="identity o
         if before == value:
             return bundle
         if before is not None:
-            rows.remove(before)
-        rows.append(deepcopy(value))
+            rows[rows.index(before)] = deepcopy(value)
+        else:
+            rows.append(deepcopy(value))
         record = {
             "schema_version": 1,
             "entity_type": kind,
@@ -377,16 +404,27 @@ def persist_frame_tracks(folder, manifest, frames):
         return sample["scene"], sample["track_id"], sample["timestamp"]
 
     reviewed = {key(s): deepcopy(s) for s in bundle["tracks"] if s["reviewed"]}
-    candidates = {}
+
+    def bucket(sample):
+        return sample["scene"], sample["track_id"], math.floor(sample["timestamp"] * 2)
+
+    candidates = dict(reviewed)
+    buckets = {bucket(sample) for sample in reviewed.values()}
     for frame in frames:
         for player in frame.get("players", []):
             sample = player.get("court_position")
             if sample is not None:
+                sample_bucket = bucket(sample)
+                if sample_bucket in buckets:
+                    continue
+                buckets.add(sample_bucket)
                 sample = deepcopy(sample)
                 sample["reviewed"] = False
                 candidates[key(sample)] = sample
-    candidates.update(reviewed)
     tracks = sorted(candidates.values(), key=key)
+    encoded = [json.dumps(sample, allow_nan=False) + "\n" for sample in tracks]
+    if len(tracks) > MAX_ROWS or sum(len(row.encode("utf-8")) for row in encoded) > MAX_BYTES:
+        raise ValueError("Track summary exceeds portable limits")
     if tracks == bundle["tracks"]:
         return bundle
     bundle["tracks"] = tracks
@@ -399,13 +437,17 @@ def persist_frame_tracks(folder, manifest, frames):
     descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=".tracks-")
     try:
         with os.fdopen(descriptor, "w") as stream:
-            for sample in tracks:
-                stream.write(json.dumps(sample, allow_nan=False) + "\n")
+            for row in encoded:
+                stream.write(row)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
     finally:
         Path(temporary).unlink(missing_ok=True)
+    manifest.setdefault("derivation_versions", {})["automatic_track_sampling"] = (
+        TRACK_SAMPLING_VERSION
+    )
+    atomic_json(Path(folder) / "manifest.json", manifest)
     return bundle
 
 

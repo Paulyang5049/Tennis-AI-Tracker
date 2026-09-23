@@ -41,16 +41,23 @@ var roundtrip=[FrameRecord](); try PackageIO.readFrames(root.appendingPathCompon
 try check(roundtrip==frames,"export roundtrip")
 print("CoreCheck: fixtures, statistics, rollback, identity, path containment, homography, resume and export passed")
 
-for name in ["minimal", "uncertain", "corrected", "full"] {
-    let source = fixture.appendingPathComponent("v3/\(name)")
+for name in ["minimal", "uncertain", "corrected", "full", "legacy-track"] {
+    let source = fixture.appendingPathComponent("v3/\(name == "legacy-track" ? "full" : name)")
     let v3 = try PackageIO.load(source)
-    let graph = try EvidenceBundle.load(source, manifest: v3)
+    var graph = try EvidenceBundle.load(source, manifest: v3)
+    if name == "legacy-track" {
+        graph.tracks = try EvidenceBundle.readLines(PlayerPosition.self, fixture.appendingPathComponent("v3/legacy-track.jsonl"))
+    }
     try graph.validate(duration: v3.media.duration)
     if CommandLine.arguments.count > 2 {
         let output = URL(fileURLWithPath: CommandLine.arguments[2]).appendingPathComponent(name)
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         try graph.write(to: output, manifest: v3)
         try ContractJSON.write(v3, to: output.appendingPathComponent("manifest.json"))
+        for view in EvidenceView.allCases {
+            let report = try ReviewReport(bundle: graph, view: view, end: v3.media.duration)
+            try ContractJSON.write(report, to: output.appendingPathComponent("report-\(view.rawValue).json"))
+        }
     }
 }
 print("CoreCheck: v3 shared evidence fixtures passed")

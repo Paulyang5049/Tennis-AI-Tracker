@@ -1,0 +1,5 @@
+{"schema_version":1,"timestamp":1,"scene":0,"track_id":1,"side":"near","position_court_m":[4,2],"method":"box_bottom_homography","reviewed":true,"calibration_id":"manual-fixture"}
+{"schema_version":1,"timestamp":1.5,"scene":0,"track_id":1,"side":"near","position_court_m":[5,3],"method":"ankles_homography","reviewed":false,"calibration_id":"manual-fixture"}
+{"schema_version":1,"timestamp":2,"scene":0,"track_id":1,"side":"unknown","position_court_m":null,"method":null,"reviewed":true,"calibration_id":null}
+{"schema_version":1,"timestamp":4,"scene":0,"track_id":1,"side":"near","position_court_m":[6,4],"method":"box_bottom_homography","reviewed":true,"calibration_id":"manual-fixture"}
+{"schema_version":1,"timestamp":2.5,"scene":1,"track_id":1,"side":"near","position_court_m":[7,5],"method":"box_bottom_homography","reviewed":true,"calibration_id":"manual-fixture-2"}

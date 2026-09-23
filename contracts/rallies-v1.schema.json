@@ -46,6 +46,9 @@
           "reviewed": {
             "type": "boolean"
           },
+          "removed": {
+            "type": "boolean"
+          },
           "outcome": {
             "type": [
               "string",

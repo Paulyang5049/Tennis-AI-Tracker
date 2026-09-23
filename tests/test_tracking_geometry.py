@@ -99,12 +99,16 @@ def test_scene_cut():
 def test_manual_calibration_expires_on_motion():
     records = [
         {"frame": i, "scene": 0, "camera_moving": i == 2, "court": None, "players": []}
-        for i in range(3)
+        for i in range(4)
     ]
     correction = {"court": {"0": [[80, 25], [240, 25], [40, 160], [280, 160]]}}
     fixed = list(corrected_records(records, correction, (180, 320), 4))
     assert fixed[0]["court"] and fixed[1]["court"]
     assert fixed[2]["court"] is None
+    assert fixed[3]["court"] is None
+    records[3]["court"] = fixed[0]["court"]
+    replayed = list(corrected_records(records, correction, (180, 320), 4))
+    assert replayed[3]["court"] is None
 
 
 def test_heatmap_plateau_uses_centre():
