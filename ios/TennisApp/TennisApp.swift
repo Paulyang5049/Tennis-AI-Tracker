@@ -9,6 +9,7 @@ import TennisCore
 }
 struct LibraryView:View {
     @State private var items=[MatchItem]()
+    @State private var sizes: [String: Int64] = [:]
     @State private var importing=false
     @State private var package=false
     @State private var busy=false
@@ -21,29 +22,51 @@ struct LibraryView:View {
                 Section {
                     ForEach(items) { item in
                         NavigationLink { ReviewView(item:item) } label: {
-                            VStack(alignment:.leading) { Text(item.title); Text("\(item.manifest.media.duration,specifier:"%.0f") 秒 · \(ByteCountFormatter.string(fromByteCount:LocalLibrary.diskUsage(item),countStyle:.file))").font(.caption) }
+                            VStack(alignment:.leading) { Text(item.title); Text("\(item.manifest.media.duration,specifier:"%.0f") 秒 · \(ByteCountFormatter.string(fromByteCount:sizes[item.id] ?? 0,countStyle:.file))").font(.caption) }
                         }
-                    }.onDelete { indices in perform { for index in indices { try LocalLibrary.remove(items[index]) }; try reload() } }
+                    }.onDelete { indices in
+                        let selected = indices.map { items[$0] }
+                        busy = true
+                        Task { do {
+                            try await Task.detached { for item in selected { try LocalLibrary.remove(item) } }.value
+                            try await reload()
+                        } catch { self.error = error.localizedDescription }; busy = false }
+                    }
                 }
-                Text("所有视频与分析留在本机。自动事件为待复核候选；统计仅使用已确认事件。分析时请保持应用在前台。").font(.footnote)
+                Text("所有视频与分析留在本机。辅助估算包含待复核候选，可切换人工已确认视图。分析时请保持应用在前台。").font(.footnote)
             }.navigationTitle("网球复盘")
             .toolbar { Menu("导入") { Button("视频") { package=false; importing=true }; Button("分析文件夹") { package=true; importing=true } }.disabled(busy) }
             .overlay { if busy { ProgressView("正在导入…") } }
             .fileImporter(isPresented:$importing,allowedContentTypes:package ? [.folder] : [.movie]) { result in
                 guard case .success(let url)=result else { return }
                 busy=true
-                Task { do { _=try await LibraryImporter().importFile(url,package:package,players:players); try reload() } catch { self.error=error.localizedDescription }; busy=false }
+                Task { do { _=try await LibraryImporter().importFile(url,package:package,players:players); try await reload() } catch { self.error=error.localizedDescription }; busy=false }
             }
-            .task { perform { try reload() } }
+            .task {
+                #if targetEnvironment(simulator)
+                if let path = ProcessInfo.processInfo.environment["TENNIS_REVIEW_FIXTURE"] {
+                    let fixture = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent(path)
+                    do { _ = try await LibraryImporter().importFile(fixture, package: true, players: 2) }
+                    catch { self.error = error.localizedDescription }
+                }
+                #endif
+                do { try await reload() } catch { self.error = error.localizedDescription }
+            }
             .alert("提示",isPresented:Binding(get:{error != nil},set:{if !$0 { error=nil }})) { Button("好") { error=nil } } message: { Text(error ?? "") }
         }
     }
-    func reload()throws { items=try LocalLibrary.list() }
-    func perform(_ action:()throws->Void) { do { try action() } catch { self.error=error.localizedDescription } }
+    @MainActor func reload() async throws {
+        let snapshot = try await Task.detached { () -> ([MatchItem], [String: Int64]) in
+            let rows = try LocalLibrary.list()
+            return (rows, Dictionary(uniqueKeysWithValues: rows.map { ($0.id, LocalLibrary.diskUsage($0)) }))
+        }.value
+        items = snapshot.0; sizes = snapshot.1
+    }
 }
 
 struct ReviewView:View {
     let item:MatchItem
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
     @State private var player=AVPlayer()
     @State private var store:AnalysisStore?
@@ -57,12 +80,12 @@ struct ReviewView:View {
     @State private var editing:AnalysisEvent?
     @State private var calibrating=false
     @State private var corners=[[Double]]()
-    @State private var exportURL:URL?
-    @State private var exporting=false
     @State private var showOverlay=true
     @State private var name=""
     @State private var selectedPlayer=1
     @State private var migratedItem: MatchItem?
+    @State private var refreshVersion = 0
+    @State private var frameLoading = false
     private let timer=Timer.publish(every:0.15,on:.main,in:.common).autoconnect()
     var body:some View {
         ScrollView {
@@ -102,21 +125,26 @@ struct ReviewView:View {
                     Text("暂停画面后，依次点击双打场地：远左、远右、近左、近右。当前 \(corners.count)/4")
                     HStack { Button("重选") { corners=[] }; Button("保存校准") { saveCourt() }.disabled(corners.count != 4); Button("取消") { calibrating=false; corners=[] } }
                 } else { Button("人工校准场地") { player.pause(); corners=[]; calibrating=true } }
-                HStack { Stepper("球员 ID \(selectedPlayer)",value:$selectedPlayer,in:1...1000); TextField("显示名称",text:$name); Button("保存") { saveName() } }
-                HStack { Button("添加击球") { editing=AnalysisEvent(kind:.hit,start:current) }; Button("添加落点") { editing=AnalysisEvent(kind:.bounce,start:current) }; Button("添加回合") { editing=AnalysisEvent(kind:.rally,start:current,end:min(current+1,item.manifest.media.duration)) } }
-                let stats=VerifiedStatistics(events:events)
-                Text("已确认：击球 \(stats.hits) · 落点 \(stats.bounces) · 回合 \(stats.rallies)")
-                ForEach(events) { event in
-                    HStack {
-                        Button("\(event.start, specifier:"%.2f")s · \(event.kind.displayName)\(event.reviewed ? " ✓" : " 待复核")\(event.excluded ? " 已排除" : "")") { seek(event.start) }
-                        Spacer(); Button("编辑") { editing=event }
-                        Button("导出") { export(event) }.disabled(exporting)
-                    }.font(.caption)
+                let nameLayout = dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading)) : AnyLayout(HStackLayout())
+                nameLayout {
+                    Stepper("球员 ID \(selectedPlayer)",value:$selectedPlayer,in:1...1000)
+                    TextField("显示名称",text:$name)
+                    Button("保存") { saveName() }
                 }
-                if let exportURL { ShareLink("分享片段",item:exportURL) }
+                ViewThatFits(in: .horizontal) {
+                    HStack { addEventButtons }
+                    VStack(alignment: .leading) { addEventButtons }
+                }
+                if let store {
+                    ReviewWorkspace(item: item, store: store, events: events, current: current, refreshVersion: refreshVersion,
+                                    seek: seek, edit: { editing = $0 }, changed: { perform { try refresh() } })
+                }
                 Button("更新可互操作分析文件") { perform { guard let store else { return }; var m=try PackageIO.load(item.folder); m.status=try store.status(); try store.export(to:item.folder,manifest:m) } }
                 if item.manifest.schemaVersion == 2 && item.manifest.status == .complete {
-                    Button("另存为新版分析（保留原比赛）") { perform { migratedItem = try LocalLibrary.saveAsV3(item) } }
+                    Button("另存为新版分析（保留原比赛）") {
+                        Task { do { migratedItem = try await Task.detached { try LocalLibrary.saveAsV3(item) }.value }
+                            catch { self.error = error.localizedDescription } }
+                    }.accessibilityIdentifier("saveAsV3")
                 }
             }.padding()
         }.navigationTitle(item.title)
@@ -128,10 +156,21 @@ struct ReviewView:View {
         }
         .onDisappear { player.pause(); task?.cancel() }
         .onChange(of:scenePhase) { _,phase in if phase != .active { task?.cancel() } }
-        .sheet(item:$editing) { event in EventEditor(event:event,duration:item.manifest.media.duration) { updated in guard let store else { throw PackageError.invalid("请先开始分析以建立记录") }; try store.saveEvent(updated,duration:item.manifest.media.duration); try refresh() } }
+        .sheet(item:$editing) { event in EventEditor(event:event,duration:item.manifest.media.duration) { updated in
+            guard let store else { throw PackageError.invalid("请先开始分析以建立记录") }
+            try await Task.detached { try store.saveEvent(updated,duration:item.manifest.media.duration) }.value
+            try refresh()
+        } }
         .alert("提示",isPresented:Binding(get:{error != nil},set:{if !$0 { error=nil }})) { Button("好") { error=nil } } message: { Text(error ?? "") }
     }
     func perform(_ action:()throws->Void) { do { try action() } catch { self.error=error.localizedDescription } }
+    @ViewBuilder var addEventButtons: some View {
+        Button("添加击球") { addEvent(.hit) }; Button("添加落点") { addEvent(.bounce) }; Button("添加回合") { addEvent(.rally) }
+    }
+    func addEvent(_ kind: EventKind) {
+        var event = AnalysisEvent(kind: kind, start: min(current,item.manifest.media.duration), end: kind == .rally ? min(current+1,item.manifest.media.duration) : nil)
+        event.scene = frame?.scene ?? 0; editing = event
+    }
     func openStore()throws {
         let m=try PackageIO.load(item.folder)
         // Do not create a resume identity before the detector is chosen.
@@ -139,11 +178,27 @@ struct ReviewView:View {
             store=try AnalysisStore(url:item.folder.appendingPathComponent("analysis.sqlite"),identity:ResumeIdentity(manifest:m)); try refresh()
         }
     }
-    func refresh()throws { events=try store?.events() ?? []; refreshFrame() }
+    func refresh()throws {
+        guard let store else { return }
+        Task { do { events = try await Task.detached { try store.events() }.value; refreshVersion += 1 }
+            catch { self.error = error.localizedDescription } }
+        refreshFrame()
+    }
     func refreshFrame() {
-        frame=try? store?.frame(at:current); trail=(try? store?.trajectory(ending:current)) ?? []
-        if var value=frame, let labels=try? store?.corrections().labels[String(value.scene)] {
-            for i in value.players.indices { value.players[i].label=labels[String(value.players[i].id)] }; frame=value
+        guard let store, !frameLoading else { return }
+        frameLoading = true; let time = current
+        Task {
+            do {
+                let result = try await Task.detached { () -> (FrameRecord?, [FrameRecord]) in
+                    var value = try store.frame(at: time)
+                    if var f = value, let labels = try store.corrections().labels[String(f.scene)] {
+                        for i in f.players.indices { f.players[i].label = labels[String(f.players[i].id)] }; value = f
+                    }
+                    return (value, try store.trajectory(ending: time))
+                }.value
+                if abs(current - time) < 0.5 { frame = result.0; trail = result.1 }
+            } catch { self.error = error.localizedDescription }
+            frameLoading = false
         }
     }
     func seek(_ time:Double) { current=time; player.seek(to:CMTime(seconds:time+item.manifest.media.origin,preferredTimescale:60000),toleranceBefore:.zero,toleranceAfter:.zero); refreshFrame() }
@@ -156,7 +211,15 @@ struct ReviewView:View {
             task=nil
         }
     }
-    func saveCourt() { perform { _=try Court(points:corners); guard let store else { throw PackageError.invalid("请先开始分析以建立记录") }; var c=try store.corrections(); guard let frame else { throw PackageError.invalid("请先显示一个已分析画面") }; c.court[String(frame.frame)]=corners; try store.saveCorrections(c); calibrating=false } }
+    func saveCourt() {
+        guard let store, let frame else { return }; let selected = corners
+        Task { do {
+            try await Task.detached {
+                _ = try Court(points: selected); var c = try store.corrections()
+                c.court[String(frame.frame)] = selected; try store.saveCorrections(c)
+            }.value
+            calibrating = false; try refresh()
+        } catch { self.error = error.localizedDescription } }
+    }
     func saveName() { perform { guard let store else { throw PackageError.invalid("请先开始分析") }; var c=try store.corrections(); c.labels[String(frame?.scene ?? 0),default:[:]][String(selectedPlayer)]=name; try store.saveCorrections(c); refreshFrame() } }
-    func export(_ event:AnalysisEvent) { exporting=true; Task { do { exportURL=try await ClipExporter.export(item:item,event:event) } catch { self.error=error.localizedDescription }; exporting=false } }
 }

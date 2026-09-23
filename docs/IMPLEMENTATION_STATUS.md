@@ -21,9 +21,32 @@ App Store release, a validated automatic stroke classifier or a phone accuracy r
 - Opt-in motion/overlay ball filtering, per-scene capture-quality summaries and conservative
   Python player ground-position estimates. These are unvalidated candidates; the baseline
   tracker remains the default. Missing calibration and ambiguous sides remain explicit.
-- Participant/assignment/rally audit replay in both runtimes, with shared recovery fixtures
-  and a desktop `review-entity` CLI. Native identity editing and track export integration
-  remain unfinished. Reopening an unchanged package preserves its derived metrics.
+- Participant/assignment/link/rally audit replay in both runtimes, with shared recovery
+  fixtures and a desktop `review-entity` CLI. Native identity editing, interval validation,
+  identity retraction and player-position export are implemented. Reopening an unchanged
+  package preserves its derived metrics.
+- Assisted and human-confirmed review reports, with input digests, support references,
+  exclusion reasons, unknown strokes and nullable empty denominators. Personal statistics
+  require confirmed scene-local identity in both views. CI compares ten complete
+  Python/Swift reports generated from shared evidence fixtures, including a legacy
+  track sample with omitted optional fields.
+- Native Overview / Review / Court pages, prioritized review, evidence seeking, identity
+  and association editors, paginated evidence lists and disclosed report/clip/package export.
+  New analyses use v3; older v2 matches remain readable and migrate by explicit save-as.
+
+The 2026-09-23 review-loop batch has passed 129 Python tests, 37 Swift tests, ten
+cross-runtime report comparisons and an unsigned simulator build. The synthetic-video
+SwiftUI path passes import, explicit migration, identity and association review,
+statistics-to-video, all three exports, reimport, reopening the original match and
+correction of a linked event after removing its association.
+Simplified Chinese at accessibility XXXL passed a text-clipping and control-description
+audit. Import uses the production importer with a simulator fixture hook; the system
+document picker, actual VoiceOver navigation, share destination and all failure-state
+UI paths remain unverified. Independent review found a post-association editing block;
+audited removal and event reclassification now have Python/Swift regression coverage.
+The final adversarial finding was independently rechecked after the fix; see the
+[audit receipt](reviews/2026-09-23-review-loop.md) and
+[development evidence](data/development-2026-09-23.json).
 
 The 2026-09-13 incremental batch passed 112 Python tests and 19 Swift tests. See
 [incremental evidence](data/development-2026-09-13.json). A partial independent review found
@@ -66,5 +89,5 @@ evidence are in [annotation guide](ANNOTATION.md) and [model release protocol](M
 1. Complete the remaining tap-by-tap native UI checks and choose the user's signing team for a physical phone. Xcode 27 beta builds and the native simulator integration check now pass.
 2. Execute the device checklist and attach measured results.
 3. Collect independent match-level labels, run the benchmark and conversion parity tools.
-4. Local review findings are resolved; retain the documented device and accuracy gates before publishing app changes.
+4. Retain the documented device and accuracy gates before release; the review-loop code audit is complete, while the listed UI acceptance paths remain open.
 5. Train/promote models only after the relevant gates pass; then review the distribution route.

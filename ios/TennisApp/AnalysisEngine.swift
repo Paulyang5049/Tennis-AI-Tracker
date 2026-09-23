@@ -14,6 +14,9 @@ actor AnalysisEngine {
         }
         guard manifest.modelProvenance==detector.provenance else { throw PackageError.incompatibleResume }
         let store=try AnalysisStore(url:item.folder.appendingPathComponent("analysis.sqlite"),identity:ResumeIdentity(manifest:manifest))
+        if manifest.schemaVersion == 3, try store.evidence() == nil {
+            try store.importEvidence(EvidenceBundle.migrating(events: store.events()), duration: manifest.media.duration)
+        }
         if try store.status() == .complete { return }
         var state=try store.state(),batch=[FrameRecord](),events=[AnalysisEvent]()
         var corrections=try store.corrections()
@@ -56,6 +59,7 @@ actor AnalysisEngine {
                     // Native inference currently uses one continuous scene; imported multi-scene
                     // packages are complete and are never resumed through this engine.
                     frame.court=try corrections.latestCourt(at:frame.frame)
+                    for index in frame.players.indices { frame.players[index].courtPosition = PlayerPositionEstimator.sample(player: frame.players[index], frame: frame) }
                     events += state.temporal.consume(frame); batch.append(frame)
                     state.nextFrame += 1; state.lastTimestamp=time
                 }

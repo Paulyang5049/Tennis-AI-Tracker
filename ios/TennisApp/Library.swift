@@ -68,10 +68,11 @@ enum LocalLibrary {
             let origin=CMSampleBufferGetPresentationTimeStamp(sample).seconds; reader.cancelReading()
             let fps=try await track.load(.nominalFrameRate),hasAudio=try await !asset.loadTracks(withMediaType:.audio).isEmpty
             let digest=try hash(target)
-            let manifest=Manifest(media:.init(id:digest,path:target.lastPathComponent,width:Int(width*scale),height:Int(height*scale),duration:duration,origin:origin,fps:Double(fps),hasAudio:hasAudio),settings:.init(players:players))
+            var manifest=try Manifest(media:.init(id:digest,path:target.lastPathComponent,width:Int(width*scale),height:Int(height*scale),duration:duration,origin:origin,fps:Double(fps),hasAudio:hasAudio),settings:.init(players:players)).migratedToV3()
+            manifest.migration = nil
             try ContractJSON.write(manifest,to:folder.appendingPathComponent("manifest.json"))
             try ContractJSON.write(Corrections(),to:folder.appendingPathComponent("corrections.json"))
-            try ContractJSON.write(EventCollection(),to:folder.appendingPathComponent("events.json"))
+            try EvidenceBundle.migrating(events: []).write(to: folder, manifest: manifest)
             FileManager.default.createFile(atPath:folder.appendingPathComponent("frames.jsonl").path,contents:nil)
             let title=source.deletingPathExtension().lastPathComponent
             try ContractJSON.write(LibraryMetadata(title:title,created:Date()),to:folder.appendingPathComponent("library.json"))

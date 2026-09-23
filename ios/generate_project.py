@@ -41,7 +41,30 @@ for mode in ['Debug','Release']:
     }};'''))
 configList=add('configs',f'isa = XCConfigurationList; buildConfigurations = {ids(configs)}; defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;')
 target=add('target',f'isa = PBXNativeTarget; name = TennisOffline; productName = TennisOffline; productType = "com.apple.product-type.application"; productReference = {product}; buildConfigurationList = {configList}; buildPhases = {ids(phases)}; buildRules = (); dependencies = (); packageProductDependencies = {ids([packageProduct])};')
-project=add('project',f'isa = PBXProject; attributes = {{ LastUpgradeCheck = 2600; }}; buildConfigurationList = {configList}; compatibilityVersion = "Xcode 14.0"; developmentRegion = "zh-Hans"; knownRegions = ("zh-Hans",en,Base); mainGroup = {group}; productRefGroup = {products}; projectDirPath = ""; projectRoot = ""; targets = {ids([target])}; packageReferences = {ids([package])};')
+targets = [target]
+ui_source = root / 'UITests/ReviewFlowTests.swift'
+if ui_source.exists():
+    ui_ref = add('ui-source', 'isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITests/ReviewFlowTests.swift; sourceTree = SOURCE_ROOT;')
+    ui_build = add('ui-build', f'isa = PBXBuildFile; fileRef = {ui_ref};')
+    ui_phase = add('ui-phase', f'isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = {ids([ui_build])}; runOnlyForDeploymentPostprocessing = 0;')
+    ui_product = add('ui-product', 'isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = TennisOfflineUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR;')
+    ui_configs = []
+    for mode in ['Debug', 'Release']:
+        ui_configs.append(add('ui-'+mode, f'isa = XCBuildConfiguration; name = {mode}; buildSettings = {{ SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 26.0; SWIFT_VERSION = 5.0; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = com.example.tennisoffline.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; TEST_TARGET_NAME = TennisOffline; TARGETED_DEVICE_FAMILY = "1,2"; CODE_SIGN_STYLE = Automatic; }};'))
+    ui_config = add('ui-configs', f'isa = XCConfigurationList; buildConfigurations = {ids(ui_configs)}; defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;')
+    dependency = add('ui-dependency', f'isa = PBXTargetDependency; target = {target};')
+    ui_target = add('ui-target', f'isa = PBXNativeTarget; name = TennisOfflineUITests; productName = TennisOfflineUITests; productType = "com.apple.product-type.bundle.ui-testing"; productReference = {ui_product}; buildConfigurationList = {ui_config}; buildPhases = {ids([ui_phase])}; buildRules = (); dependencies = {ids([dependency])};')
+    targets.append(ui_target)
+project=add('project',f'isa = PBXProject; attributes = {{ LastUpgradeCheck = 2600; }}; buildConfigurationList = {configList}; compatibilityVersion = "Xcode 14.0"; developmentRegion = "zh-Hans"; knownRegions = ("zh-Hans",en,Base); mainGroup = {group}; productRefGroup = {products}; projectDirPath = ""; projectRoot = ""; targets = {ids(targets)}; packageReferences = {ids([package])};')
 out=root/'TennisOffline.xcodeproj'; out.mkdir(exist_ok=True)
 (out/'project.pbxproj').write_text('// !$*UTF8*$!\n{ archiveVersion = 1; classes = {}; objectVersion = 60; objects = {\n'+''.join(f'{k} = {{ {v} }};\n' for k,v in objects.items())+f'}}; rootObject = {project}; }}\n')
 print(out)
+if ui_source.exists():
+    schemes = out / 'xcshareddata/xcschemes'
+    schemes.mkdir(parents=True, exist_ok=True)
+    (schemes / 'TennisOfflineUITests.xcscheme').write_text(f'''<?xml version="1.0" encoding="UTF-8"?>
+<Scheme LastUpgradeVersion="2600" version="1.3">
+ <BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES"><BuildActionEntries><BuildActionEntry buildForTesting="YES" buildForRunning="YES"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="{ui_target}" BuildableName="TennisOfflineUITests.xctest" BlueprintName="TennisOfflineUITests" ReferencedContainer="container:TennisOffline.xcodeproj"/></BuildActionEntry></BuildActionEntries></BuildAction>
+ <TestAction buildConfiguration="Debug" shouldUseLaunchSchemeArgsEnv="NO"><Testables><TestableReference skipped="NO"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="{ui_target}" BuildableName="TennisOfflineUITests.xctest" BlueprintName="TennisOfflineUITests" ReferencedContainer="container:TennisOffline.xcodeproj"/></TestableReference></Testables></TestAction>
+</Scheme>
+''')

@@ -26,6 +26,7 @@ jobs:
           mkdir -p reports/contract-parity
           ios/.build/core-check contracts/fixtures reports/contract-parity
           PYTHONPATH=src uv run --no-project --with jsonschema==4.26.0 python -c 'from pathlib import Path; from tennis_ai.evidence import load_evidence; [load_evidence(p) for p in Path("reports/contract-parity").iterdir()]'
+          PYTHONPATH=src uv run --no-project --with jsonschema==4.26.0 python scripts/check_review_parity.py reports/contract-parity
           python3 scripts/development_evidence.py > reports/development.json
       - name: Publish development-only Swift test report
         if: always()
