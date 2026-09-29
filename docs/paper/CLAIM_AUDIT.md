@@ -10,11 +10,18 @@ Status: working draft; no independent reviewer study has been run. This table li
 | 129 Python and 37 Swift tests; ten equal reports; unsigned simulator build | `docs/data/development-2026-09-23.json` and `docs/IMPLEMENTATION_STATUS.md` | Development checks at that batch, not an independent reviewer or physical-device result. |
 | Scoreboard serve-icon false ball and unstable player IDs | `VALIDATION.md` full broadcast check | Qualitative inspection only; no measured error rate. |
 | Experimental model 0 TP / 34 FP / 50 FN; baseline 2 / 21 / 48 | `VALIDATION.md` Google Colab section | Small image split at fixed 0.1 confidence and 0.5 IoU; original-video independence and near-duplicates unverified. Candidate failed promotion. |
+| Unreviewed synthetic hit: assisted 1, human verified undefined; link marked unreviewed in a fixture copy: assisted landing 1, human verified undefined | `scripts/paper_fixture_evidence.py`, `docs/data/paper-fixture-evidence.json`, and `contracts/fixtures/v3` | Deterministic report-policy demonstration on constructed evidence; no independent video, user, or accuracy result. |
 | No verified phone-match cohort | `benchmarks/acquisition.json` | Current recorded availability is zero; future reviewer study has no results. |
 
 ## Submission review
 
-- Verify every citation against its publisher or original preprint and ensure the literature comparison makes no unsupported superiority claim.
+- Verify every citation against its publisher or original preprint. EventAnchor is a close predecessor for interactive racket-sports annotation; the manuscript must not claim superior review efficiency without a direct comparison.
 - Confirm the diagram matches the current code and cross-runtime contracts; verify every non-null human-verified statistic's eligibility and support fields before making a universal traceability claim.
 - Replace protocol language with measured results only after independent reviewers, adjudication, and frozen outputs exist. Keep engineering tests, coverage, accuracy, and user outcomes in separate result tables.
 - Verify figure and footage permissions, remove private metadata from the LaTeX upload, inspect the compiled PDF, and retain the AI-assistance disclosure after author review.
+
+## Remaining submission blockers
+
+- Acquire permission-cleared fixed-camera singles clips from distinct original matches. The existing local broadcast highlights file has not been cleared for figures or study reuse and does not match the target camera setting.
+- Recruit two independent annotators/reviewers and an adjudicator, freeze the protocol, run the study, and replace proposed-study wording with actual methods and results. If the study cannot be done, substantially narrow the manuscript's research claim and obtain an external scholarly assessment before submitting.
+- Have the named author approve the final scientific claims, affiliations, rights, and AI-use disclosure. Confirm arXiv category endorsement in the author's account and inspect the upload-generated PDF and source archive.

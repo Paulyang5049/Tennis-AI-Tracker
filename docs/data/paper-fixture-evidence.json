@@ -1,0 +1,62 @@
+{
+  "full_link_retraction": {
+    "assisted_landings_after": {
+      "event_ids": [
+        "bounce-1",
+        "shot-1"
+      ],
+      "exclusions": {},
+      "sample_count": 1,
+      "support_refs": [
+        "bounce-1",
+        "link:link-1"
+      ],
+      "value": 1
+    },
+    "human_verified_landings_after": {
+      "event_ids": [],
+      "exclusions": {
+        "bounce-1": "unresolved_or_other_identity"
+      },
+      "sample_count": 0,
+      "support_refs": [],
+      "value": null
+    },
+    "human_verified_landings_before": {
+      "event_ids": [
+        "bounce-1",
+        "shot-1"
+      ],
+      "exclusions": {},
+      "sample_count": 1,
+      "support_refs": [
+        "bounce-1",
+        "link:link-1"
+      ],
+      "value": 1
+    }
+  },
+  "scope": "synthetic shared fixtures; no video or independent reviewer outcome",
+  "uncertain": {
+    "assisted_hits": {
+      "event_ids": [
+        "shot-1"
+      ],
+      "exclusions": {},
+      "sample_count": 1,
+      "support_refs": [
+        "shot-1"
+      ],
+      "value": 1
+    },
+    "human_verified_hits": {
+      "event_ids": [],
+      "exclusions": {
+        "shot-1": "unreviewed"
+      },
+      "sample_count": 0,
+      "support_refs": [],
+      "value": null
+    }
+  }
+}

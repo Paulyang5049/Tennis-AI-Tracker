@@ -1,0 +1,11 @@
+# Footage candidates for the paper study
+
+Checked 29 September 2026. These are acquisition leads, not accepted study clips. The paper protocol requires three 5–10 minute fixed-camera, full-court singles clips from three distinct original matches, with analysis and figure rights verified. No candidate below has passed all checks, so `benchmarks/acquisition.json` remains at zero verified matches.
+
+| Source | What the primary source establishes | Remaining check |
+| --- | --- | --- |
+| [CalTennis](https://huggingface.co/datasets/demalenk/caltennis) | Card reports 51 hours of practice and match play, 40 players, 2–6 synchronized views, blurred faces, informed consent, and CC BY-NC 4.0. Its small metadata index contains session and video IDs. | Confirm three genuinely distinct singles matches, full-court fixed views, clip duration, usable source files, and that paper figures and the intended research workflow fit the licence. A session ID alone is not proof of a distinct match. |
+| [tenis_backview](https://www.kaggle.com/datasets/gastonarielfrancois/tenis-backview/data) | Uploader describes ten 1080-by-1920 tennis videos with player, ball, and court annotations and displays CC0. | Verify original footage rights, match independence, clip duration, camera coverage, and label quality. An uploader's CC0 label alone does not establish rights in third-party footage. |
+| [UVY](https://zenodo.org/records/21303900) | Repository describes CC BY user-generated sports videos. Its [per-video index](https://zenodo.org/records/21303900/files/metrics_per_video.csv) lists three tennis clips lasting 27.3, 32.27, and 14.77 seconds. | These clips are too short for the frozen 5–10 minute study design; useful only for a separately labelled pilot if court view and source rights are confirmed. |
+
+Before accepting a source, inspect the actual video locally, record its SHA-256 and original match identity, verify reuse terms at the original source, and document whether participants and recording owners permit analysis and publication. Keep downloaded media and annotations outside version control. Do not infer model accuracy from provided labels until the label definitions and independence are audited.

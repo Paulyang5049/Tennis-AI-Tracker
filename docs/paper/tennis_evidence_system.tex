@@ -9,7 +9,7 @@
 \begin{document}
 \maketitle
 \begin{abstract}
-Tennis video analysis can produce plausible events and statistics even when the underlying ball, player, or court observations are uncertain. We present an offline desktop and iOS development system that retains frame observations, distinguishes automatic candidates from reviewed events, and links human-verified statistics to their supporting evidence. The implementation combines local object detection and tracking with manual court calibration, event correction, portable analysis packages, and an auditable review store. In one 11-minute-34-second broadcast processing check, the desktop pipeline retained 41,564 frames and audio; observed-ball coverage was 49.56\% and court-calibration coverage was 50.55\%. All 190 generated event candidates remained unreviewed, so this check provides no event-accuracy or verified-match-statistics result. Shared Python and Swift evidence fixtures and simulator workflows check interchange and review behavior. We describe the system's provenance rules, preliminary engineering checks, observed failure cases, and the labelled, match-isolated evaluation required before automatic tennis claims can be validated.
+Tennis video analysis can produce plausible events and statistics even when the underlying ball, player, or court observations are uncertain. We present an offline desktop and iOS development system that retains frame observations, distinguishes automatic candidates from reviewed events, and links human-verified statistics to their supporting evidence. The implementation combines local object detection and tracking with manual court calibration, event correction, portable analysis packages, and an auditable review store. In one 11-minute-34-second broadcast processing check, the desktop pipeline retained 41,564 frames and audio; observed-ball coverage was 49.56\% and court-calibration coverage was 50.55\%. All 190 generated event candidates remained unreviewed. A reproducible synthetic-fixture example shows that making a shot-to-bounce link unreviewed removes a personal landing from the human-verified report while retaining its assisted estimate. Shared Python and Swift evidence fixtures and simulator workflows check interchange and review behavior. These results provide no event-accuracy or reviewer-benefit estimate; an independent study remains necessary.
 \end{abstract}
 
 \section{Introduction}
@@ -18,14 +18,14 @@ Video analysis for players and coaches needs more than visually plausible overla
 The current implementation uses YOLO26 detection and pose models~\cite{yolo26} and ByteTrack-style player association~\cite{bytetrack}. These components supply observations, while a separate evidence layer controls which observations can support reviewed claims. The public project source is available at \url{https://github.com/Paulyang5049/Tennis-AI-Tracker}. The code repository, rather than any private match recording, is the intended reproducibility artifact.
 
 \section{Related work and positioning}
-TrackNet studied small, fast tennis-ball localization in broadcast video~\cite{tracknet}. YOLO26 and ByteTrack address perception and tracking; this paper examines how uncertain outputs reach a reviewed report. No performance comparison with TrackNet has been established. Model cards document intended use, evaluation, and limitations of models~\cite{modelcards}, while datasheets propose analogous documentation for datasets~\cite{datasheets}. The unit of inspection here is a derived tennis statistic with references to eligible events and clips. The practical benefit of that design remains to be measured with independent reviewers.
+TrackNet studied small, fast tennis-ball localization in broadcast video~\cite{tracknet}. YOLO26 and ByteTrack address perception and tracking; this paper examines how uncertain outputs reach a reviewed report. No performance comparison with TrackNet has been established. EventAnchor previously combined computer-vision suggestions and interactive annotation for racket-sports video and evaluated its table-tennis interface with users~\cite{eventanchor}. Our focus is a policy for which reviewed events, associations, and participant identities may support a downstream statistic across desktop and iOS packages. We have not compared review efficiency with EventAnchor. Model cards document intended use, evaluation, and limitations of models~\cite{modelcards}, while datasheets propose analogous documentation for datasets~\cite{datasheets}. The unit of inspection here is a derived tennis statistic with references to eligible events and clips. The practical benefit of that design remains to be measured with independent reviewers.
 
 \section{System design}
 \subsection{Local observations and candidate generation}
 The Python workbench decodes video frames, records presentation times, runs local detection and tracking, estimates court geometry, and writes per-frame observations. The system distinguishes an observed ball, a short bounded interpolation, and an unknown location. It generates heuristic hit, bounce, and rally candidates for review. A coordinate called a landing point requires bounce evidence; an airborne ball is not projected through the court homography and relabelled as a landing. The current event heuristic is not a validated classifier.
 
 \subsection{Evidence and review}
-The review store keeps source observations, candidate events, human corrections, and derived reports as separate layers. Reviewers can inspect exact frames and clips, correct event timing and identity, exclude false detections, and audit changes. The report has an assisted view for candidate-based estimates and a human-verified view that requires reviewed, non-excluded inputs. Participant statistics require a confirmed mapping between scene-local tracks and persistent participants. Derived records carry provenance and supporting references; edits invalidate dependent claims. Portable versioned packages allow Python and Swift to exchange this evidence, with explicit migration of older packages.
+The review store keeps source observations, candidate events, human corrections, and derived reports as separate layers. Reviewers can inspect exact frames and clips, correct event timing and identity, exclude false detections, and audit changes. The report has an assisted view for candidate-based estimates and a human-verified view that requires reviewed, non-excluded inputs. Participant statistics require a confirmed mapping between scene-local tracks and persistent participants. For a personal event count, eligibility requires a reviewed event, no exclusion, and one reviewed scene-to-participant assignment at the event time. Other statistics additionally require their own reviewed associations; for example, a personal landing needs a valid shot-to-bounce link. An empty eligible denominator remains undefined instead of becoming a reported zero. Derived records carry an input digest, support references, and exclusion reasons; edits invalidate dependent claims. Portable versioned packages allow Python and Swift to exchange this evidence, with explicit migration of older packages.
 
 \begin{figure}[ht]
 \centering
@@ -67,6 +67,23 @@ Shared Python--Swift reports & 10 fixture reports equal \\
 
 The 23 September development batch recorded 129 passing Python tests, 37 passing Swift tests, ten equal cross-runtime review reports, and an unsigned iOS simulator build. A simulator workflow exercised package import, review edits, traceable statistics, export, and reimport. These checks establish software behavior on their exercised paths. They do not establish automatic event accuracy, coach utility, or sustained physical-device performance.
 
+Table~\ref{tab:fixture} gives a reproducible policy example generated from committed synthetic fixtures. The uncertain fixture contains a candidate hit; only the assisted report counts it. In a copy of a separate reviewed fixture, setting the shot-to-bounce link's reviewed flag to false leaves the assisted personal landing estimate at one but makes the human-verified personal landing undefined. The latter report records the excluded bounce and has no eligible landing support references. This is a check of report behavior on constructed evidence, not a result from independent video or human reviewers.
+
+\begin{table}[h]
+\centering
+\caption{Synthetic-fixture report example; values are counts or undefined (---).}
+\label{tab:fixture}
+\begin{tabular}{lll}
+\toprule
+Fixture condition and metric & Assisted & Human verified \\
+\midrule
+Unreviewed candidate hit: hits & 1 & --- \\
+Reviewed shot-to-bounce link: personal landings & 1 & 1 \\
+Link marked unreviewed: personal landings & 1 & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 The broadcast inspection exposed a false ball detection on a scoreboard serve icon and unstable player identities. A separately trained ball candidate also failed its untouched test-split promotion comparison: it recorded zero true positives, 34 false positives, and 50 false negatives, while the default sports-ball baseline recorded two true positives, 21 false positives, and 48 false negatives. The trained candidate was therefore not promoted as the default. Source-video identities for that small public-image dataset remain unknown, limiting interpretation of its split.
 
 \section{Independent reviewer-study protocol}
@@ -77,7 +94,7 @@ This is a preliminary system report. There is no independently labelled, match-l
 
 A future evaluation should lock a match-isolated test set before tuning thresholds, label ball observations and event times independently, and report precision and recall by camera setting and near/far court. It should measure reviewer time and corrections alongside accuracy, compare against the shipped baseline on the same frozen footage, and test model parity and sustained performance on a physical phone. Coaching utility would require a separate user study. These are proposed measurements, not completed results.
 
-The public repository provides code, contracts, synthetic fixtures, and aggregate development records. Private match footage, derived video, and detailed local logs are excluded. Future study material should be shared only where recording rights and participant consent allow it. This draft used generative AI writing assistance; the named author is responsible for checking all claims, citations, and final wording.
+The public repository provides code, contracts, synthetic fixtures, and aggregate development records. The fixture example can be reproduced with \texttt{uv run python scripts/paper\_fixture\_evidence.py}; its machine-readable output is stored in \texttt{docs/data/paper-fixture-evidence.json}. Private match footage, derived video, and detailed local logs are excluded. Future study material should be shared only where recording rights and participant consent allow it. This draft used generative AI writing assistance; the named author is responsible for checking all claims, citations, and final wording.
 
 \section{Conclusion}
 The implemented system preserves uncertain observations and provides a trace from reviewed statistics to frames and clips. Preliminary checks support local processing, package interchange, and review workflow execution, while observed errors and missing labels prevent claims of automatic tennis-analysis accuracy. The next scientific step is an independently labelled, match-isolated evaluation of both model errors and human review burden.
@@ -86,6 +103,7 @@ The implemented system preserves uncertain observations and provides a trace fro
 \bibitem{tracknet} Y.-C. Huang et al., ``TrackNet: A Deep Learning Network for Tracking High-speed and Tiny Objects in Sports Applications,'' arXiv:1907.03698, 2019. \url{https://arxiv.org/abs/1907.03698}.
 \bibitem{yolo26} G. Jocher et al., ``Ultralytics YOLO26: Unified Real-Time End-to-End Vision Models,'' arXiv:2606.03748, 2026. \url{https://arxiv.org/abs/2606.03748}.
 \bibitem{bytetrack} Y. Zhang et al., ``ByteTrack: Multi-Object Tracking by Associating Every Detection Box,'' arXiv:2110.06864, 2021. \url{https://arxiv.org/abs/2110.06864}.
+\bibitem{eventanchor} D. Deng et al., ``EventAnchor: Reducing Human Interactions in Event Annotation of Racket Sports Videos,'' arXiv:2101.04954, 2021. \url{https://arxiv.org/abs/2101.04954}.
 \bibitem{modelcards} M. Mitchell et al., ``Model Cards for Model Reporting,'' arXiv:1810.03993, 2018. \url{https://arxiv.org/abs/1810.03993}.
 \bibitem{datasheets} T. Gebru et al., ``Datasheets for Datasets,'' arXiv:1803.09010, 2018. \url{https://arxiv.org/abs/1803.09010}.
 \end{thebibliography}
