@@ -1,0 +1,92 @@
+\documentclass[10pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\title{An Offline, Evidence-Traceable Tennis Video Analysis System: Design and Preliminary Verification}
+\author{Yunbo Yang}
+\date{Working draft, 29 September 2026}
+\begin{document}
+\maketitle
+\begin{abstract}
+Tennis video analysis can produce plausible events and statistics even when the underlying ball, player, or court observations are uncertain. We present an offline desktop and iOS development system that retains frame observations, distinguishes automatic candidates from reviewed events, and links human-verified statistics to their supporting evidence. The implementation combines local object detection and tracking with manual court calibration, event correction, portable analysis packages, and an auditable review store. In one 11-minute-34-second broadcast processing check, the desktop pipeline retained 41,564 frames and audio; observed-ball coverage was 49.56\% and court-calibration coverage was 50.55\%. All 190 generated event candidates remained unreviewed, so this check provides no event-accuracy or verified-match-statistics result. Shared Python and Swift evidence fixtures and simulator workflows check interchange and review behavior. We describe the system's provenance rules, preliminary engineering checks, observed failure cases, and the labelled, match-isolated evaluation required before automatic tennis claims can be validated.
+\end{abstract}
+
+\section{Introduction}
+Video analysis for players and coaches needs more than visually plausible overlays. A detector may mistake a scoreboard symbol for a ball, and a tracker may change a player's identity during a rally. A downstream statistic can conceal these errors if it lacks a path back to the source frames. This work describes a local workflow designed to expose those paths. Its contribution is a reviewable system design and implementation report, not a new detection architecture or a measured improvement in tennis-event accuracy.
+
+The current implementation uses YOLO26 detection and pose models~\cite{yolo26} and ByteTrack-style player association~\cite{bytetrack}. These components supply observations, while a separate evidence layer controls which observations can support reviewed claims. The public project source is available at \url{https://github.com/Paulyang5049/Tennis-AI-Tracker}. The code repository, rather than any private match recording, is the intended reproducibility artifact.
+
+\section{Related work and positioning}
+TrackNet studied small, fast tennis-ball localization in broadcast video~\cite{tracknet}. YOLO26 and ByteTrack address perception and tracking; this paper examines how uncertain outputs reach a reviewed report. No performance comparison with TrackNet has been established. Model cards document intended use, evaluation, and limitations of models~\cite{modelcards}, while datasheets propose analogous documentation for datasets~\cite{datasheets}. The unit of inspection here is a derived tennis statistic with references to eligible events and clips. The practical benefit of that design remains to be measured with independent reviewers.
+
+\section{System design}
+\subsection{Local observations and candidate generation}
+The Python workbench decodes video frames, records presentation times, runs local detection and tracking, estimates court geometry, and writes per-frame observations. The system distinguishes an observed ball, a short bounded interpolation, and an unknown location. It generates heuristic hit, bounce, and rally candidates for review. A coordinate called a landing point requires bounce evidence; an airborne ball is not projected through the court homography and relabelled as a landing. The current event heuristic is not a validated classifier.
+
+\subsection{Evidence and review}
+The review store keeps source observations, candidate events, human corrections, and derived reports as separate layers. Reviewers can inspect exact frames and clips, correct event timing and identity, exclude false detections, and audit changes. The report has an assisted view for candidate-based estimates and a human-verified view that requires reviewed, non-excluded inputs. Participant statistics require a confirmed mapping between scene-local tracks and persistent participants. Derived records carry provenance and supporting references; edits invalidate dependent claims. Portable versioned packages allow Python and Swift to exchange this evidence, with explicit migration of older packages.
+
+\begin{figure}[ht]
+\centering
+\fbox{\begin{minipage}{0.9\linewidth}\centering
+Video frame and time $\longrightarrow$ observations $\longrightarrow$ event candidates\\[3pt]
+$\downarrow$ review of source frames and clips\\[3pt]
+Reviewed events and identity mappings $\longrightarrow$ statistics with support references\\[3pt]
+$\downarrow$ metric-to-event-to-video inspection
+\end{minipage}}
+\caption{Evidence path. A candidate does not enter a human-verified statistic without review.}
+\label{fig:evidence}
+\end{figure}
+
+\subsection{Offline workflow}
+The desktop application serves annotation, benchmarking, model training, and advanced review. The iOS development app supports local import, review, correction, and explicit export. Media and analysis are stored locally by default. The system makes no claim that model confidence alone establishes ground truth.
+
+\section{Preliminary verification}
+Table~\ref{tab:checks} reports engineering observations from the checked-in validation records. Coverage describes the presence of an estimate, not whether that estimate is correct. The broadcast footage used for the local check is not included in the repository or in this submission.
+
+\begin{table}[h]
+\centering
+\caption{Recorded preliminary checks; none is an event-accuracy estimate.}
+\label{tab:checks}
+\begin{tabular}{ll}
+\toprule
+Check & Recorded result \\
+\midrule
+Broadcast duration & 693.53 seconds \\
+Decoded and retained frames & 41,564 of 41,564 expected \\
+Observed-ball coverage & 49.56\% of frames \\
+Interpolated-ball coverage & 6.53\% of frames \\
+Court-calibration coverage & 50.55\% of frames \\
+Hit / bounce / rally candidates & 112 / 54 / 24 \\
+Reviewed events in that run & 0 \\
+Shared Python--Swift reports & 10 fixture reports equal \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The 23 September development batch recorded 129 passing Python tests, 37 passing Swift tests, ten equal cross-runtime review reports, and an unsigned iOS simulator build. A simulator workflow exercised package import, review edits, traceable statistics, export, and reimport. These checks establish software behavior on their exercised paths. They do not establish automatic event accuracy, coach utility, or sustained physical-device performance.
+
+The broadcast inspection exposed a false ball detection on a scoreboard serve icon and unstable player identities. A separately trained ball candidate also failed its untouched test-split promotion comparison: it recorded zero true positives, 34 false positives, and 50 false negatives, while the default sports-ball baseline recorded two true positives, 21 false positives, and 48 false negatives. The trained candidate was therefore not promoted as the default. Source-video identities for that small public-image dataset remain unknown, limiting interpretation of its split.
+
+\section{Independent reviewer-study protocol}
+The planned study will use at least three legally usable fixed-camera singles clips from different original matches. Two reviewers will independently label events and complete no-event intervals without seeing automatic candidates. An adjudicator will preserve the original labels and resolve disagreements. Reviewers will then inspect candidates and source clips. The study will record corrections, omissions, time spent, and whether each non-null human-verified statistic resolves to eligible events and viewable evidence. The clip list, software revision, model checksums, annotation instructions, and analysis definitions must be frozen before measurement. Detailed recording fields are in the companion study protocol. This is a descriptive workflow study, without a control interface or sufficient matches for a general accuracy claim.
+
+\section{Limitations and evaluation plan}
+This is a preliminary system report. There is no independently labelled, match-level phone-video test set; event candidates in the full broadcast check were not reviewed. The project therefore cannot claim accurate hit, bounce, rally, stroke, landing, or coaching outputs. Simulator execution is not evidence of phone performance. Broadcast footage does not establish performance for fixed-camera phone singles or doubles.
+
+A future evaluation should lock a match-isolated test set before tuning thresholds, label ball observations and event times independently, and report precision and recall by camera setting and near/far court. It should measure reviewer time and corrections alongside accuracy, compare against the shipped baseline on the same frozen footage, and test model parity and sustained performance on a physical phone. Coaching utility would require a separate user study. These are proposed measurements, not completed results.
+
+The public repository provides code, contracts, synthetic fixtures, and aggregate development records. Private match footage, derived video, and detailed local logs are excluded. Future study material should be shared only where recording rights and participant consent allow it. This draft used generative AI writing assistance; the named author is responsible for checking all claims, citations, and final wording.
+
+\section{Conclusion}
+The implemented system preserves uncertain observations and provides a trace from reviewed statistics to frames and clips. Preliminary checks support local processing, package interchange, and review workflow execution, while observed errors and missing labels prevent claims of automatic tennis-analysis accuracy. The next scientific step is an independently labelled, match-isolated evaluation of both model errors and human review burden.
+
+\begin{thebibliography}{9}
+\bibitem{tracknet} Y.-C. Huang et al., ``TrackNet: A Deep Learning Network for Tracking High-speed and Tiny Objects in Sports Applications,'' arXiv:1907.03698, 2019. \url{https://arxiv.org/abs/1907.03698}.
+\bibitem{yolo26} G. Jocher et al., ``Ultralytics YOLO26: Unified Real-Time End-to-End Vision Models,'' arXiv:2606.03748, 2026. \url{https://arxiv.org/abs/2606.03748}.
+\bibitem{bytetrack} Y. Zhang et al., ``ByteTrack: Multi-Object Tracking by Associating Every Detection Box,'' arXiv:2110.06864, 2021. \url{https://arxiv.org/abs/2110.06864}.
+\bibitem{modelcards} M. Mitchell et al., ``Model Cards for Model Reporting,'' arXiv:1810.03993, 2018. \url{https://arxiv.org/abs/1810.03993}.
+\bibitem{datasheets} T. Gebru et al., ``Datasheets for Datasets,'' arXiv:1803.09010, 2018. \url{https://arxiv.org/abs/1803.09010}.
+\end{thebibliography}
+\end{document}
