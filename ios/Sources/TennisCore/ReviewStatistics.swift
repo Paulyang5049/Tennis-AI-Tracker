@@ -83,9 +83,10 @@ public struct ReviewReport: Codable, Equatable, Sendable {
         let hits = bundle.events.events.filter { $0.kind == .hit }, accepted = hits.filter { reason($0) == nil }
         let excluded = Dictionary(uniqueKeysWithValues: hits.compactMap { e in reason(e).map { (e.id, $0) } })
         metrics = [metric("hits", accepted, excluded)]
+        let hitDenominatorRefs = accepted.map(\.id)
         for stroke in Stroke.allCases {
             let selected = accepted.filter { $0.stroke == stroke }
-            var row = metric("stroke." + stroke.rawValue, selected, excluded)
+            var row = metric("stroke." + stroke.rawValue, selected, excluded, refs: hitDenominatorRefs)
             row.value = accepted.isEmpty ? nil : Double(selected.count); metrics.append(row)
         }
         var landings: [AnalysisEvent] = [], points: [ReviewPoint] = [], unassigned: [ReviewPoint] = [], skipped: [String: String] = [:], refs: [String] = []

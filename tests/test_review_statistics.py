@@ -53,6 +53,10 @@ def test_report_separates_views_and_unassigned_landings():
     rows = {row["id"]: row for row in report["metrics"]}
     assert rows["hits"]["value"] == 1
     assert rows["stroke.unknown"]["value"] == 1
+    assert rows["stroke.unknown"]["support_refs"] == ["shot-1"]
+    assert rows["stroke.forehand"]["value"] == 0
+    assert rows["stroke.forehand"]["event_ids"] == []
+    assert rows["stroke.forehand"]["support_refs"] == ["shot-1"]
     assert rows["landings"]["event_ids"] == ["bounce-1", "shot-1"]
     graph["events"]["links"][0]["reviewed"] = False
     changed = review_report(graph, view="human_verified", participant_id="self", end=5)

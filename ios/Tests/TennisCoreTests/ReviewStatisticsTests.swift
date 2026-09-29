@@ -29,6 +29,10 @@ final class ReviewStatisticsTests: XCTestCase {
         let report = try ReviewReport(bundle: graph, view: .humanVerified, participantId: "self", end: 5)
         XCTAssertEqual(report.metrics.first { $0.id == "hits" }?.value, 1)
         XCTAssertEqual(report.metrics.first { $0.id == "stroke.unknown" }?.value, 1)
+        XCTAssertEqual(report.metrics.first { $0.id == "stroke.unknown" }?.supportRefs, ["shot-1"])
+        XCTAssertEqual(report.metrics.first { $0.id == "stroke.forehand" }?.value, 0)
+        XCTAssertEqual(report.metrics.first { $0.id == "stroke.forehand" }?.eventIds, [])
+        XCTAssertEqual(report.metrics.first { $0.id == "stroke.forehand" }?.supportRefs, ["shot-1"])
         XCTAssertEqual(report.metrics.first { $0.id == "landings" }?.eventIds, ["bounce-1", "shot-1"])
         graph.events.links?[0].reviewed = false
         let changed = try ReviewReport(bundle: graph, view: .humanVerified, participantId: "self", end: 5)

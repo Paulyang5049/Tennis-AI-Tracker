@@ -80,9 +80,10 @@ def review_report(bundle, *, view="assisted", participant_id=None, start=0.0, en
     accepted = [e for e in hits if reason(e) is None]
     excluded = {e["id"]: reason(e) for e in hits if reason(e) is not None}
     metrics = [metric("hits", accepted, excluded)]
+    hit_denominator_refs = [event["id"] for event in accepted]
     for stroke in (*STROKES, "unknown"):
         selected = [e for e in accepted if e["stroke"] == stroke]
-        row = metric("stroke." + stroke, selected, excluded)
+        row = metric("stroke." + stroke, selected, excluded, refs=hit_denominator_refs)
         # A zero category is meaningful only when an eligible hit denominator exists.
         row["value"] = len(selected) if accepted else None
         metrics.append(row)

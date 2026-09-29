@@ -2,6 +2,8 @@
 
 Status: working draft; no independent reviewer study has been run. This table links current quantitative claims to checked-in evidence and records the main limits. Recheck it at the exact submission revision.
 
+The prioritized scientific and manuscript findings are in [PRESUBMISSION_REVIEW.md](PRESUBMISSION_REVIEW.md).
+
 | Manuscript claim | Evidence | Interpretation / limit |
 | --- | --- | --- |
 | 693.53 seconds; 41,564 retained of 41,564 expected frames | `docs/data/validation-2026-09-10.json`, `VALIDATION.md` full broadcast check | One broadcast processing run; not representative phone-video performance. |
@@ -17,6 +19,7 @@ Status: working draft; no independent reviewer study has been run. This table li
 
 - Verify every citation against its publisher or original preprint. EventAnchor is a close predecessor for interactive racket-sports annotation; the manuscript must not claim superior review efficiency without a direct comparison.
 - Confirm the diagram matches the current code and cross-runtime contracts; verify every non-null human-verified statistic's eligibility and support fields before making a universal traceability claim.
+- Zero-valued stroke categories now reference the eligible hits that define their denominator in Python and Swift; retain the source-media audit in the reviewer study before claiming universal traceability.
 - Replace protocol language with measured results only after independent reviewers, adjudication, and frozen outputs exist. Keep engineering tests, coverage, accuracy, and user outcomes in separate result tables.
 - Verify figure and footage permissions, remove private metadata from the LaTeX upload, inspect the compiled PDF, and retain the AI-assistance disclosure after author review.
 
