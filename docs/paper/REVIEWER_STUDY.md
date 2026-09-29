@@ -22,4 +22,4 @@ The independent labels may be exported to the existing benchmark manifest only a
 
 ## Release packet
 
-Keep a private packet with permissions, manifest, raw independent labels, adjudication log, time log, and frozen predictions. Public artifacts may include the protocol, code revision, model provenance, aggregate tables, and only figures or data explicitly permitted for redistribution. Before the manuscript reports a result, independently recompute the aggregate from the frozen records and add its evidence path to `CLAIM_AUDIT.md`.
+Keep a private packet with permissions, manifest, raw independent labels, adjudication log, time log, and frozen predictions. Public artifacts may include the protocol, code revision, model provenance, aggregate tables, and only figures or data explicitly permitted for redistribution. Use `scripts/paper_study_summary.py` for the reproducible descriptive counts, then have a second person inspect the private inputs and recompute the aggregate before the manuscript reports a result. Add its evidence path to `CLAIM_AUDIT.md`.

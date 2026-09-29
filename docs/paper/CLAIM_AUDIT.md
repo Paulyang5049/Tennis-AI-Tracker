@@ -4,6 +4,7 @@ Status: working draft; no independent reviewer study has been run. This table li
 
 The prioritized scientific and manuscript findings are in [PRESUBMISSION_REVIEW.md](PRESUBMISSION_REVIEW.md).
 The frozen study rules and blank private recording sheets are in [REVIEWER_STUDY.md](REVIEWER_STUDY.md) and [STUDY_PACKET.md](STUDY_PACKET.md). They contain no measured reviewer outcomes.
+`scripts/paper_study_summary.py` can recompute descriptive counts from a private frozen manifest after data collection. It has been checked only with constructed records; it is not study evidence.
 
 | Manuscript claim | Evidence | Interpretation / limit |
 | --- | --- | --- |
