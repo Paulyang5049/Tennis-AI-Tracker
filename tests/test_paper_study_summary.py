@@ -6,8 +6,8 @@ from copy import deepcopy
 
 import pytest
 
-from scripts.paper_study_summary import summarize
 from tennis_ai.events import new_event
+from tennis_ai.paper_study import summarize
 
 
 def _write(path, value):
