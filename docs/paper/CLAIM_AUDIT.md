@@ -15,6 +15,7 @@ The frozen study rules and blank private recording sheets are in [REVIEWER_STUDY
 | Scoreboard serve-icon false ball and unstable player IDs | `VALIDATION.md` full broadcast check | Qualitative inspection only; no measured error rate. |
 | Experimental model 0 TP / 34 FP / 50 FN; baseline 2 / 21 / 48 | `VALIDATION.md` Google Colab section | Small image split at fixed 0.1 confidence and 0.5 IoU; original-video independence and near-duplicates unverified. Candidate failed promotion. |
 | Unreviewed synthetic hit: assisted 1, human verified undefined; link marked unreviewed in a fixture copy: assisted landing 1, human verified undefined | `scripts/paper_fixture_evidence.py`, `docs/data/paper-fixture-evidence.json`, and `contracts/fixtures/v3` | Deterministic report-policy demonstration on constructed evidence; no independent video, user, or accuracy result. |
+| Constructed reports retain support references for hits, stroke categories including zero values, landings, unassigned landings, rally length, and player positions | `tests/test_review_statistics.py` and shared v3 fixtures | Structural report checks only. The fixtures do not prove that references open real source media or that reviewers can resolve them. |
 | No verified phone-match cohort | `benchmarks/acquisition.json` | Current recorded availability is zero; future reviewer study has no results. |
 
 ## Submission review

@@ -42,6 +42,7 @@ def test_positions_keep_evidence_exclusions_and_rally_lengths():
     assert rally()["value"] == 1.5
     assert rally()["sample_count"] == 2
     assert rally()["event_ids"] == ["shot-1", "shot-2", "shot-3"]
+    assert rally()["support_refs"] == ["rally:one", "rally:two"]
     graph["events"]["events"][-1]["reviewed"] = False
     assert rally()["value"] == 1
     assert rally()["exclusions"] == {"rally:two": "missing_or_ineligible_shot_list"}
@@ -52,6 +53,7 @@ def test_report_separates_views_and_unassigned_landings():
     report = review_report(graph, view="human_verified", participant_id="self", end=5)
     rows = {row["id"]: row for row in report["metrics"]}
     assert rows["hits"]["value"] == 1
+    assert rows["hits"]["support_refs"] == ["shot-1"]
     assert rows["stroke.unknown"]["value"] == 1
     assert rows["stroke.unknown"]["support_refs"] == ["shot-1"]
     assert rows["stroke.forehand"]["value"] == 0
@@ -64,6 +66,17 @@ def test_report_separates_views_and_unassigned_landings():
     assert next(r for r in changed["metrics"] if r["id"] == "landings")["value"] is None
     assisted = review_report(graph, view="assisted", participant_id="self", end=5)
     assert next(r for r in assisted["metrics"] if r["id"] == "landings")["value"] == 1
+
+
+def test_unassigned_verified_landing_retains_bounce_support():
+    graph = load_evidence(Path(__file__).resolve().parents[1] / "contracts/fixtures/v3/full")
+    graph["events"]["links"] = []
+    report = review_report(graph, view="human_verified", end=5)
+    row = next(r for r in report["metrics"] if r["id"] == "unassigned_landings")
+    assert row["value"] == 1
+    assert row["event_ids"] == ["bounce-1"]
+    assert row["support_refs"] == ["bounce-1"]
+    assert row["points"][0]["participant_id"] is None
 
 
 def test_scene_mapping_and_empty_denominator():
