@@ -1,10 +1,12 @@
 """Fetch upstream assets to ignored local folders, with provenance."""
 
 import json
+import shutil
+import tempfile
 import urllib.request
 from pathlib import Path
 
-from tennis_ai.artifacts import sha256
+from tennis_ai.artifacts import sha256, ultralytics_path
 
 COURT_COMMIT = "e5cd4f1ce26b15361700d3d89e068cbf0e82749e"
 TRACKNET_COMMIT = "730ea17a324321c553c480179caa8ff13e4cf553"
@@ -51,8 +53,10 @@ def setup(root, include_court=True, include_tracknet=False):
     for name in ["yolo26s.pt", "yolo26s-pose.pt"]:
         path = folder / name
         if not path.exists():
-            attempt_download_asset(str(path))
-        YOLO(str(path))  # Verify checkpoint deserialization before reporting success.
+            # Download outside the project: Ultralytics mangles paths with apostrophes.
+            with tempfile.TemporaryDirectory() as staging:
+                shutil.move(attempt_download_asset(str(Path(staging) / name)), path)
+        YOLO(ultralytics_path(path))  # Verify deserialization before reporting success.
         provenance[name] = {"sha256": sha256(path), "source": "Ultralytics release assets"}
     if include_court:
         architecture = root / "external" / "TennisCourtDetector" / "tracknet.py"

@@ -4,6 +4,7 @@ import hashlib
 import importlib.metadata
 import json
 import shutil
+import tempfile
 from pathlib import Path
 
 ARCHITECTURES = {"ball": "yolo26s", "court": "TennisCourtDetector-15"}
@@ -15,6 +16,23 @@ def sha256(path):
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def ultralytics_path(path):
+    """A path Ultralytics can load. It strips every apostrophe from weight paths, so
+    "/Volumes/Paul's SSD/..." becomes a missing "/Volumes/Pauls SSD/...". Such files
+    are handed over through an apostrophe-free symlink instead."""
+    path = Path(path)
+    if "'" not in str(path):
+        return str(path)
+    folder = Path(tempfile.gettempdir()) / "tennis-ai-weights"
+    folder.mkdir(exist_ok=True)
+    digest = hashlib.sha256(str(path.resolve()).encode()).hexdigest()[:12]
+    link = folder / f"{digest}-{path.name}"
+    if not link.is_symlink() or link.resolve() != path.resolve():
+        link.unlink(missing_ok=True)
+        link.symlink_to(path.resolve())
+    return str(link)
 
 
 def package(weights, destination, kind, input_size, metrics=None):

@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 import torch
 
-from tennis_ai.artifacts import validate_bundle
+from tennis_ai.artifacts import ultralytics_path, validate_bundle
 from tennis_ai.geometry import calibrate, ground_point, iou, project
 
 
@@ -150,13 +150,13 @@ class Models:
         for name in ["yolo26s.pt", "yolo26s-pose.pt"]:
             if not (model_dir / name).is_file():
                 raise FileNotFoundError("Models are missing. Run: tennis-ai setup")
-        self.detector = YOLO(str(model_dir / "yolo26s.pt"))
-        self.pose = YOLO(str(model_dir / "yolo26s-pose.pt"))
+        self.detector = YOLO(ultralytics_path(model_dir / "yolo26s.pt"))
+        self.pose = YOLO(ultralytics_path(model_dir / "yolo26s-pose.pt"))
         self.ball = None
         self.ball_manifest = None
         if ball_bundle:
             path, self.ball_manifest = validate_bundle(ball_bundle, "ball")
-            self.ball = YOLO(str(path))
+            self.ball = YOLO(ultralytics_path(path))
             if self.ball.names != {0: "tennis ball"}:
                 raise ValueError("Actual checkpoint classes disagree with manifest")
         self.tracker = BYTETracker(
