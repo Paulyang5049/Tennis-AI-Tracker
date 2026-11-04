@@ -82,7 +82,18 @@ def create_app(root):
     jobs: dict[str, dict[str, Any]] = {}
     worker_lock = threading.Lock()
 
-    def start(video, mode, device, ball, court, current=None, overlays=None, resume=False):
+    def start(
+        video,
+        mode,
+        device,
+        ball,
+        court,
+        current=None,
+        overlays=None,
+        resume=False,
+        ball_tracker="baseline-v1",
+        event_detector="baseline-v1",
+    ):
         if not current and not video:
             raise gr.Error("Choose a recording before starting analysis.")
         if not worker_lock.acquire(blocking=False):
@@ -120,6 +131,8 @@ def create_app(root):
                             device,
                             (ball or "").strip() or None,
                             (court or "").strip() or None,
+                            ball_tracker=ball_tracker,
+                            event_detector=event_detector,
                         ),
                         job["cancel"],
                         update,
@@ -600,6 +613,19 @@ def create_app(root):
                     device = gr.Dropdown(
                         ["auto", "mps", "cpu", "cuda"], value="auto", label="Processing device"
                     )
+                    ball_tracker = gr.Dropdown(
+                        ["baseline-v1", "experimental-motion-v1"],
+                        value="baseline-v1",
+                        label="Ball tracker",
+                        info="experimental-motion-v1 is experimental and unvalidated",
+                    )
+                    event_detector = gr.Dropdown(
+                        ["baseline-v1", "contact-v2"],
+                        value="baseline-v1",
+                        label="Hit candidate detector",
+                        info="contact-v2 tolerates missing ball frames at contact; "
+                        "experimental and unvalidated",
+                    )
                 with gr.Accordion("Custom Colab model bundles", open=False):
                     ball = gr.Textbox(
                         label="Local ball bundle folder",
@@ -634,7 +660,11 @@ def create_app(root):
             saved_runs,
             [job_state, status],
         )
-        run.click(start, [video, mode, device, ball, court], [job_state, status])
+        run.click(
+            lambda v, m, d, b, c, t, e: start(v, m, d, b, c, ball_tracker=t, event_detector=e),
+            [video, mode, device, ball, court, ball_tracker, event_detector],
+            [job_state, status],
+        )
         stop.click(cancel, job_state, status, queue=False)
         timer: Any = gr.Timer(1)
         timer.tick(
