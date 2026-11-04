@@ -61,3 +61,21 @@ for name in ["minimal", "uncertain", "corrected", "full", "legacy-track"] {
     }
 }
 print("CoreCheck: v3 shared evidence fixtures passed")
+
+// Python's contact-v2 output for the same frames is the reference; checkpoint halfway like a resume.
+let contactFolder = fixture.appendingPathComponent("contact-v2")
+var contactFrames = [FrameRecord](); try PackageIO.readFrames(contactFolder.appendingPathComponent("frames.jsonl")) { contactFrames.append($0) }
+var contact = ContactEvents(), contactEvents = [AnalysisEvent]()
+for (index, frame) in contactFrames.enumerated() {
+    contactEvents += contact.consume(frame)
+    if index == contactFrames.count / 2 { contact = try ContractJSON.decoder().decode(ContactEvents.self, from: ContractJSON.encoder().encode(contact)) }
+}
+contactEvents = (contactEvents + contact.finish()).filter { $0.kind != .bounce }
+let contactExpected = try JSONSerialization.jsonObject(with: Data(contentsOf: contactFolder.appendingPathComponent("expected.json"))) as! [[String: Any]]
+try check(contactEvents.count == contactExpected.count, "contact-v2 event count")
+for (event, row) in zip(contactEvents, contactExpected) {
+    try check(event.id == row["id"] as? String && event.kind.rawValue == row["kind"] as? String, "contact-v2 event \(event.id)")
+    try check(abs(event.start - (row["start"] as! Double)) < 1e-9 && abs(event.end - (row["end"] as! Double)) < 1e-9, "contact-v2 time \(event.id)")
+    try check(event.playerId == row["player_id"] as? Int, "contact-v2 player \(event.id)")
+}
+print("CoreCheck: contact-v2 matches Python on the shared fixture")

@@ -113,3 +113,15 @@ def test_unknown_detector_versions_are_rejected():
     with pytest.raises(ValueError):
         Settings(event_detector="unversioned")
     assert Settings().event_detector == "baseline-v1"
+
+
+def test_shared_swift_fixture_is_current():
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[1] / "scripts/build_contact_fixture.py"
+    result = subprocess.run(
+        [sys.executable, str(script), "--check"], capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr

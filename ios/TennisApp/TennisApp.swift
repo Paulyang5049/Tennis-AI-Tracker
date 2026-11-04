@@ -14,11 +14,15 @@ struct LibraryView:View {
     @State private var package=false
     @State private var busy=false
     @State private var players=2
+    @State private var contactV2=false
     @State private var error:String?
     var body:some View {
         NavigationStack {
             List {
-                Section("导入设置") { Picker("球员人数",selection:$players) { Text("单打").tag(2); Text("双打").tag(4) } }
+                Section("导入设置") {
+                    Picker("球员人数",selection:$players) { Text("单打").tag(2); Text("双打").tag(4) }
+                    Toggle("实验：容错击球候选 (contact-v2)",isOn:$contactV2).accessibilityIdentifier("import.contactV2")
+                }
                 Section {
                     ForEach(items) { item in
                         NavigationLink { ReviewView(item:item) } label: {
@@ -40,7 +44,7 @@ struct LibraryView:View {
             .fileImporter(isPresented:$importing,allowedContentTypes:package ? [.folder] : [.movie]) { result in
                 guard case .success(let url)=result else { return }
                 busy=true
-                Task { do { _=try await LibraryImporter().importFile(url,package:package,players:players); try await reload() } catch { self.error=error.localizedDescription }; busy=false }
+                Task { do { _=try await LibraryImporter().importFile(url,package:package,players:players,eventDetector:contactV2 ? ContactEvents.version : nil); try await reload() } catch { self.error=error.localizedDescription }; busy=false }
             }
             .task {
                 #if targetEnvironment(simulator)

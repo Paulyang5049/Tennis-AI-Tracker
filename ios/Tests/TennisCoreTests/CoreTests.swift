@@ -96,6 +96,24 @@ final class CoreTests: XCTestCase {
     }
     var fixture:URL { URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("contracts/fixtures") }
     func temp()throws->URL { let root=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true); addTeardownBlock { try? FileManager.default.removeItem(at:root) }; return root }
+    func testContactV2MatchesPythonOnSharedFixture() throws {
+        let folder = fixture.appendingPathComponent("contact-v2")
+        var frames = [FrameRecord](); try PackageIO.readFrames(folder.appendingPathComponent("frames.jsonl")) { frames.append($0) }
+        var detector = ContactEvents(), events = [AnalysisEvent]()
+        for frame in frames { events += detector.consume(frame) }
+        events = (events + detector.finish()).filter { $0.kind != .bounce }
+        let expected = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("expected.json"))) as? [[String: Any]])
+        XCTAssertEqual(events.map(\.id), expected.compactMap { $0["id"] as? String })
+        for (event, row) in zip(events, expected) {
+            XCTAssertEqual(event.start, try XCTUnwrap(row["start"] as? Double), accuracy: 1e-9)
+            XCTAssertEqual(event.playerId, row["player_id"] as? Int)
+        }
+        var state = RuntimeState(); state.contact = detector
+        let decoded = try ContractJSON.decoder().decode(RuntimeState.self, from: ContractJSON.encoder().encode(state))
+        XCTAssertEqual(decoded, state)
+        let legacy = try ContractJSON.decoder().decode(RuntimeState.self, from: ContractJSON.encoder().encode(RuntimeState()))
+        XCTAssertNil(legacy.contact)
+    }
     func testSharedFixturesAndRoundTrip()throws {
         let manifest=try PackageIO.load(fixture); XCTAssertEqual(manifest.settings.players,4); XCTAssertEqual(manifest.media.origin,5)
         var frames=[FrameRecord](); try PackageIO.readFrames(fixture.appendingPathComponent("frames.jsonl")) { frames.append($0) }
