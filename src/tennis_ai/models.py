@@ -120,6 +120,8 @@ class TrackNetBall:
         x, y = point
         # The class map has no calibrated score; a constant keeps tracker ranking by motion.
         return [{"box": [x - r, y - r, x + r, y + r], "confidence": 0.5}]
+
+
 def in_reach(ball_box, player_box):
     """Whether a ball box centre lies in the region a player could hit from."""
     x, y = (ball_box[0] + ball_box[2]) / 2, (ball_box[1] + ball_box[3]) / 2
