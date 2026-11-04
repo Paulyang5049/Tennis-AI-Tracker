@@ -120,6 +120,12 @@ class TrackNetBall:
         x, y = point
         # The class map has no calibrated score; a constant keeps tracker ranking by motion.
         return [{"box": [x - r, y - r, x + r, y + r], "confidence": 0.5}]
+def in_reach(ball_box, player_box):
+    """Whether a ball box centre lies in the region a player could hit from."""
+    x, y = (ball_box[0] + ball_box[2]) / 2, (ball_box[1] + ball_box[3]) / 2
+    x1, y1, x2, y2 = player_box
+    height = max(1.0, y2 - y1)
+    return x1 - 0.6 * height <= x <= x2 + 0.6 * height and y1 - 0.5 * height <= y <= y2
 
 
 class Models:
@@ -217,7 +223,8 @@ class Models:
                 self.court.to("cpu")
             return model.predict(frame, device="cpu", verbose=False, **kwargs)[0]
 
-    def infer(self, frame, court=None):
+    def infer(self, frame, court=None, detail=True):
+        """With detail=False, skip pose and crop passes unless a ball is within a player's reach."""
         result = self.predict(self.detector, frame, classes=[0, 32, 38], conf=0.1, imgsz=1280)
         boxes = result.boxes.cpu().numpy()
         tracks = self.tracker.update(boxes[boxes.cls == 0], frame)
@@ -238,6 +245,8 @@ class Models:
         balls = [{"box": row[:4].tolist(), "confidence": float(row[4])} for row in ball_boxes]
         if self.tracknet is not None:
             balls = self.tracknet.detect(frame)
+        if not detail and not any(in_reach(b["box"], p["box"]) for b in balls for p in players):
+            return players, rackets, balls, []
         pose_result = self.predict(self.pose, frame, conf=0.25, imgsz=640)
         poses = []
         if pose_result.keypoints is not None:

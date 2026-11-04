@@ -43,6 +43,12 @@ def main():
         help="tracknet-v2 is an unvalidated three-frame heatmap detector; needs setup --with-tracknet",
     )
     analysis.add_argument(
+        "--pose-stride",
+        type=int,
+        default=1,
+        help="Run pose and player-crop passes every N frames (and near contacts); default 1",
+    )
+    analysis.add_argument(
         "--event-detector",
         choices=["baseline-v1", "contact-v2"],
         default="baseline-v1",
@@ -135,6 +141,7 @@ def main():
                     # Later fields by name, so independently added options cannot shift.
                     spin_detector=args.spin_detector,
                     ball_model=args.ball_model,
+                    pose_stride=args.pose_stride,
                 ),
                 cancel,
                 lambda f, m: print(f"{f:.0%}: {m}", flush=True),

@@ -38,6 +38,7 @@ class Settings:
     event_detector: str = "baseline-v1"
     spin_detector: str | None = None
     ball_model: str = "yolo-coco"
+    pose_stride: int = 1
 
     def __post_init__(self):
         if self.players not in (2, 4):
@@ -52,6 +53,8 @@ class Settings:
             raise ValueError("Unsupported ball model")
         if self.ball_model != "yolo-coco" and self.ball_bundle:
             raise ValueError("Choose either a ball bundle or an alternative ball model")
+        if isinstance(self.pose_stride, bool) or self.pose_stride not in range(1, 11):
+            raise ValueError("Pose stride must be an integer from 1 to 10")
 
 
 def connect(folder):
@@ -288,7 +291,12 @@ def _analyze(
             if cut or moving or timestamp - last_calibration >= 1.0:
                 court = models.court_geometry(frame)
                 last_calibration = timestamp
-            players, rackets, balls, poses = models.infer(frame, court)
+            if settings.pose_stride == 1:
+                players, rackets, balls, poses = models.infer(frame, court)
+            else:
+                # Detail on the stride, after cuts and whenever a ball is near a player.
+                detail = cut or index % settings.pose_stride == 0
+                players, rackets, balls, poses = models.infer(frame, court, detail=detail)
             attach_poses(players, poses)
             associate_rackets(players, rackets)
             ball = ball_tracker.update(balls, timestamp, frame.shape, court)
