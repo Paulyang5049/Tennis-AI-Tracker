@@ -24,6 +24,17 @@ final class ReviewStatisticsTests: XCTestCase {
         sample.reviewed = false; try retained.append(sample)
         XCTAssertTrue(try XCTUnwrap(retained.samples.first).reviewed)
     }
+    func testSpinMetricsMatchSharedCorrectedFixture() throws {
+        let corrected = try EvidenceBundle.load(fixture.deletingLastPathComponent().appendingPathComponent("corrected"))
+        XCTAssertEqual(corrected.events.events.first { $0.id == "shot-1" }?.spin, .slice)
+        let report = try ReviewReport(bundle: corrected, view: .humanVerified, end: 5)
+        XCTAssertEqual(report.definitionVersion, "review-loop-v2")
+        XCTAssertEqual(report.metrics.first { $0.id == "spin.slice" }?.value, 1)
+        XCTAssertEqual(report.metrics.first { $0.id == "spin.topspin" }?.value, 0)
+        XCTAssertEqual(report.metrics.first { $0.id == "spin.topspin" }?.supportRefs, ["shot-1"])
+        let full = try ReviewReport(bundle: try EvidenceBundle.load(fixture), view: .humanVerified, end: 5)
+        XCTAssertEqual(full.metrics.first { $0.id == "spin.unknown" }?.value, 1)
+    }
     func testEvidenceViewsAndDigest() throws {
         var graph = try EvidenceBundle.load(fixture)
         let report = try ReviewReport(bundle: graph, view: .humanVerified, participantId: "self", end: 5)

@@ -10,6 +10,11 @@
 "metric.stroke.volley" = "Volley";
 "metric.stroke.overhead" = "Overhead";
 "metric.stroke.unknown" = "Unknown action";
+"metric.spin.topspin" = "Topspin";
+"metric.spin.slice" = "Slice";
+"metric.spin.flat" = "Flat";
+"metric.spin.unknown" = "Unknown spin";
+"event.spin" = "Spin";
 "metric.landings" = "Landing distribution";
 "metric.unassigned_landings" = "Unassigned landings";
 "metric.rally_length" = "Reviewed rally mean shot count";

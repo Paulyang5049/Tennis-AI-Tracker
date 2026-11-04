@@ -91,3 +91,27 @@ def test_candidate_identity_never_creates_personal_statistics():
     graph["events"]["assignments"][0]["reviewed"] = False
     report = review_report(graph, view="assisted", participant_id="self", end=5)
     assert next(r for r in report["metrics"] if r["id"] == "hits")["value"] is None
+
+
+def test_spin_metrics_count_reviewed_hits_with_hit_denominator_support():
+    root = Path(__file__).resolve().parents[1] / "contracts/fixtures/v3"
+    corrected = load_evidence(root / "corrected")
+    rows = {
+        row["id"]: row for row in review_report(corrected, view="human_verified", end=5)["metrics"]
+    }
+    assert rows["spin.slice"]["value"] == 1
+    assert rows["spin.slice"]["event_ids"] == ["shot-1"]
+    assert rows["spin.topspin"]["value"] == 0
+    assert rows["spin.topspin"]["support_refs"] == ["shot-1"]
+    assert rows["stroke.forehand"]["value"] == 1
+    # A missing spin counts as unknown; with no eligible hits every spin stays undefined.
+    full = {
+        row["id"]: row
+        for row in review_report(load_evidence(root / "full"), view="human_verified", end=5)[
+            "metrics"
+        ]
+    }
+    assert full["spin.unknown"]["value"] == 1
+    minimal = review_report(load_evidence(root / "minimal"), view="human_verified", end=5)
+    assert {r["id"]: r["value"] for r in minimal["metrics"]}["spin.slice"] is None
+    assert minimal["definition_version"] == "review-loop-v2"

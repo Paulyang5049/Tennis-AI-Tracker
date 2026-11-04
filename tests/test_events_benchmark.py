@@ -422,3 +422,22 @@ def test_ball_bootstrap_reports_undefined_denominators(tmp_path):
     assert ci["precision"]["lower"] is None
     assert ci["precision"]["valid_resamples"] == 0
     assert ci["recall"]["lower"] == ci["recall"]["upper"] == 0
+
+
+def test_spin_is_validated_editable_and_summarized(tmp_path):
+    with pytest.raises(ValueError):
+        new_event("hit", 1, spin="backspin")
+    assert new_event("hit", 1, spin="slice")["spin"] == "slice"
+    frames = write_lines(tmp_path / "frames.jsonl", [frame(0, None)])
+    events = tmp_path / "events.json"
+    corrections = write_json(tmp_path / "corrections.json", {"court": {}, "labels": {}})
+    regenerate_events(frames, events, corrections)
+    update_event(
+        events,
+        corrections,
+        None,
+        {"kind": "hit", "start": 1, "stroke": "backhand", "spin": "slice", "reviewed": True},
+    )
+    summary = summarize_events(regenerate_events(frames, events, corrections))["verified"]
+    assert summary["strokes"] == {"backhand": 1}
+    assert summary["spins"] == {"slice": 1}

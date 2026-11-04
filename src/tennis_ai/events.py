@@ -15,6 +15,8 @@ from uuid import uuid4
 from tennis_ai.package import atomic_json
 
 STROKES = ("serve", "forehand", "backhand", "volley", "overhead")
+# Spin is a technique attribute of any stroke, so a slice forehand stays a forehand.
+SPINS = ("topspin", "slice", "flat")
 KINDS = ("hit", "bounce", "rally")
 
 
@@ -36,6 +38,8 @@ def validate_event(event):
         raise ValueError("Point events must have identical start/end times")
     if event.get("stroke") not in (*STROKES, "unknown"):
         raise ValueError("Unsupported stroke")
+    if event.get("spin") not in (None, *SPINS, "unknown"):
+        raise ValueError("Unsupported spin")
     if not isinstance(event.get("scene"), int) or isinstance(event["scene"], bool):
         raise ValueError("Event scene must be an integer")
     player = event.get("player_id")
@@ -549,6 +553,7 @@ def update_event(events_path, corrections_path, event_id, changes):
         "scene",
         "player_id",
         "stroke",
+        "spin",
         "position",
         "reviewed",
         "excluded",
@@ -592,6 +597,9 @@ def summarize_events(events):
         "verified": {
             **counts(verified),
             "strokes": dict(Counter(e["stroke"] for e in verified if e["kind"] == "hit")),
+            "spins": dict(
+                Counter(e.get("spin") or "unknown" for e in verified if e["kind"] == "hit")
+            ),
             "landings": [
                 {
                     "event_id": e["id"],
