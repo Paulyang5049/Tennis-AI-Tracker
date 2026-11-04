@@ -119,7 +119,8 @@ def main():
                     args.ball_tracker,
                     json.loads(Path(args.overlay_masks).read_text()) if args.overlay_masks else [],
                     args.event_detector,
-                    args.spin_detector,
+                    # Later fields by name, so independently added options cannot shift.
+                    spin_detector=args.spin_detector,
                 ),
                 cancel,
                 lambda f, m: print(f"{f:.0%}: {m}", flush=True),
