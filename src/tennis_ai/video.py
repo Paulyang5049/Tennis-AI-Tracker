@@ -38,23 +38,39 @@ def probe(path):
         raise ValueError(f"Cannot decode video: {error}") from error
 
 
-def decode(path):
+def decode(path, after=None):
+    """Stream oriented frames; seek from a validated (frame, timestamp) checkpoint."""
     with av.open(str(path)) as container:
         stream = container.streams.video[0]
         origin, previous = None, -1.0
-        for index, frame in enumerate(container.decode(stream)):
+        index = 0
+        if after is not None:
+            first = next(container.decode(stream), None)
+            if first is None or first.pts is None or first.time_base is None:
+                raise ValueError("Missing presentation timestamp")
+            origin = float(first.pts * first.time_base)
+            index, previous = int(after[0]) + 1, float(after[1])
+            if stream.time_base is None:
+                raise ValueError("Missing stream time base")
+            container.seek(
+                int((origin + previous) / stream.time_base), stream=stream, backward=True
+            )
+        for frame in container.decode(stream):
             if frame.pts is None or frame.time_base is None:
                 raise ValueError("Missing presentation timestamp; normalize the source video first")
             absolute = float(frame.pts * frame.time_base)
             if origin is None:
                 origin = absolute
             timestamp = absolute - origin
+            if after is not None and timestamp <= float(after[1]) + 1e-9:
+                continue
             if timestamp <= previous:
                 raise ValueError(
                     "Non-increasing video timestamps; normalize the source video first"
                 )
             previous = timestamp
             yield index, timestamp, oriented_image(frame)
+            index += 1
 
 
 class VideoWriter:

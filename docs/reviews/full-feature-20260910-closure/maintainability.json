@@ -1,0 +1,22 @@
+{
+  "reviewer": "maintainability",
+  "findings": [
+    {
+      "title": "Repeated contract validators have already diverged",
+      "severity": "P2",
+      "file": "ios/Sources/TennisCore/Contract.swift",
+      "line": 58,
+      "confidence": 75,
+      "autofix_class": "manual",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "pre_existing": false,
+      "suggested_fix": "Choose whether 7200 seconds is part of the portable v2 contract. If it is, add the bound to contracts/analysis-v2.schema.json and enforce it in the Python loader; if it is only an iOS import policy, remove it from Manifest.validate and keep it in LocalLibrary.importVideo/importPackage with a policy-specific error. Add shared over-limit and boundary fixtures that both Python and Swift contract tests consume so platform validators cannot drift unnoticed.",
+      "first_evidence": "ios/Sources/TennisCore/Contract.swift:58 -- media.duration.isFinite, media.duration > 0, media.duration <= 7200, media.origin.isFinite,"
+    }
+  ],
+  "residual_risks": [],
+  "testing_gaps": [
+    "No shared contract fixture exercises a duration above 7200 seconds through both the Python and Swift v2 loaders."
+  ]
+}

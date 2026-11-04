@@ -1,0 +1,11 @@
+{
+  "source": "Collected terminal reviewer returns from preceding review run, restored without inventing detail-tier impact. Current-tree closure verification separate.",
+  "window_id": "01a083e4-5ad5-7771-ae27-26c1e863880e",
+  "items": {
+    "security": "667645731",
+    "adversarial": "225215383",
+    "testing": "575696520",
+    "maintainability": "13063643"
+  },
+  "cross_model": "Not dispatched: caller prohibits external peer messages. Local adversarial terminal return restored; no cross-model independence claimed."
+}

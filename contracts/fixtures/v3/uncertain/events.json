@@ -1,0 +1,32 @@
+{
+  "schema_version": 3,
+  "events": [
+    {
+      "id": "shot-1",
+      "kind": "hit",
+      "start": 1,
+      "end": 1,
+      "scene": 0,
+      "player_id": null,
+      "stroke": "unknown",
+      "position": null,
+      "provenance": "automatic",
+      "reviewed": false,
+      "confidence": null,
+      "excluded": false,
+      "favorite": false,
+      "participant_id": null,
+      "contact_interval": [
+        0.98,
+        1.02
+      ],
+      "contact_point_image_px": null,
+      "hitter_position_court_m": null,
+      "field_confidence": {},
+      "position_source": null
+    }
+  ],
+  "participants": [],
+  "assignments": [],
+  "links": []
+}

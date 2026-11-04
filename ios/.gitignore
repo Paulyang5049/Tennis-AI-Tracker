@@ -1,0 +1,6 @@
+.build/
+TennisOffline.xcodeproj/
+TennisApp/Resources/Models/Detector.mlpackage/
+TennisApp/Resources/Models/ModelManifest.json
+DerivedData*/
+*.xcuserstate

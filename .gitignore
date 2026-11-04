@@ -16,3 +16,13 @@ runs/
 !outputs/.gitkeep
 .DS_Store
 .env
+.context/
+
+# Native build outputs and isolated model-conversion artifacts
+ios/.build/
+ios/build/
+ios/DerivedData/
+*.xcuserstate
+xcuserdata/
+mobile-toolchain/.venv*/
+mobile-toolchain/exports/

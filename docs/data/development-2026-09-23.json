@@ -1,0 +1,25 @@
+{
+  "status": "development-only-validated",
+  "scope": "Native review loop, identity and association audit, bounded position summaries and traceable statistics",
+  "python_tests_passed": 129,
+  "swift_tests_passed": 37,
+  "shared_review_reports_equal": 10,
+  "quality_checks": ["ruff check", "ruff format check", "mypy", "git diff --check", "unsigned simulator build"],
+  "ui_test": {
+    "result": "passed",
+    "device": "iPhone 17 Pro simulator, iOS 27.0",
+    "result_bundles": ["Test-TennisOfflineUITests-2026.09.23_10-16-34-+0800.xcresult", "Test-TennisOfflineUITests-2026.09.23_10-13-36-+0800.xcresult", "Test-TennisOfflineUITests-2026.09.23_10-18-05-+0800.xcresult", "Test-TennisOfflineUITests-2026.09.23_10-18-37-+0800.xcresult", "Test-TennisOfflineUITests-2026.09.23_10-18-59-+0800.xcresult"],
+    "covered": ["generated package import", "explicit v2 save-as-v3", "identity settings", "reviewed shot-bounce link", "event edit persisted to export", "court view", "metric to event to video", "report, clip and full package export", "reimport with unchanged statistics", "close and reopen original edited match", "Simplified Chinese at accessibility XXXL with text-clipping audit", "remove association, reclassify event and update statistics"],
+    "export_checks": ["report folder contains only statistics.json", "exported evidence passes Python validation and report parity", "clip decodes and retains audio", "post-reclassification report matches current SQLite evidence snapshot"],
+    "not_covered": ["system document picker", "actual VoiceOver navigation", "all error-state UI paths", "system share-sheet receiving destination"]
+  },
+  "independent_review": {
+    "status": "actionable-findings-fixed-and-independently-rechecked",
+    "reviewed_lenses": ["project standards", "correctness", "API contract", "testing", "maintainability", "security", "performance", "reliability", "Swift iOS", "adversarial"],
+    "fixed_findings": ["participant overlap parity", "unresolved identity edit", "nullable field digest parity", "track sampling bound", "stale calibration after camera movement", "atomic audit replacement", "incremental checkpoint storage", "association confirmation retraction", "shared identity resolver", "audited association and rally removal before event reclassification"],
+    "receipt": "docs/reviews/2026-09-23-review-loop.md",
+    "remaining": []
+  },
+  "not_validated": ["automatic event accuracy", "doubles", "physical-device performance", "two-hour peak memory", "VoiceOver on physical device", "TestFlight signing"],
+  "release_approved": false
+}

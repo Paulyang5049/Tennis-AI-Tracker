@@ -2,7 +2,7 @@ name: Tests
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
 
 permissions:
@@ -24,8 +24,41 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - uses: astral-sh/setup-uv@v10.0.1
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - run: uv sync --extra dev
+      - run: uv sync --frozen --extra dev
+      - run: python3 scripts/sync_contract_schemas.py --check
       - run: uv run ruff check src scripts tests
       - run: uv run ruff format --check src scripts tests
       - run: uv run mypy src
-      - run: uv run pytest -q
+      - run: uv run pytest -q --junitxml=reports/pytest.xml
+      - name: Publish development-only test report
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: development-only-python-${{ matrix.python-version }}-${{ github.sha }}
+          path: reports/pytest.xml
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Build development wheel
+        if: matrix.python-version == '3.11'
+        run: uv build --wheel --out-dir dist
+      - name: Report promotion gates without signing
+        if: matrix.python-version == '3.11'
+        run: python3 scripts/release_gate.py --channel internal-testflight --dry-run
+      - name: Record public development provenance
+        if: matrix.python-version == '3.11'
+        run: python3 scripts/development_evidence.py > reports/development.json
+      - name: Publish development-only package and contracts
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: development-only-package-evidence-${{ github.sha }}
+          path: |
+            dist/*.whl
+            contracts/*.schema.json
+            contracts/fixtures/
+            benchmarks/acquisition.json
+            docs/EVALUATION_PROTOCOL.md
+            docs/data/release-gates.json
+            reports/development.json
+          retention-days: 14
+          if-no-files-found: error

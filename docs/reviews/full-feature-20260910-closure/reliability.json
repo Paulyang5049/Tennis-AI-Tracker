@@ -1,0 +1,33 @@
+{
+  "reviewer": "reliability",
+  "findings": [
+    {
+      "title": "Completion is committed before portable export succeeds",
+      "severity": "P1",
+      "file": "ios/TennisApp/AnalysisEngine.swift",
+      "line": 65,
+      "why_it_matters": "A native analysis can be recorded as complete even when writing frames.jsonl, events.json, corrections.json, or manifest.json fails. On the next attempt, the early complete-status return skips both analysis and export, so the user is left with stale or empty interoperable artifacts and no automatic recovery path. Exporting first and committing complete only after all artifacts succeed keeps the resumable database status aligned with the package users can actually open.",
+      "autofix_class": "gated_auto",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "suggested_fix": "At end of analysis, checkpoint the final batch with a nonterminal status, export all portable artifacts, then atomically set the store and manifest to complete. Alternatively, when store.status is complete, verify/export the artifacts before returning so a failed export is resumable.",
+      "confidence": 75,
+      "evidence": [
+        "ios/TennisApp/AnalysisEngine.swift:65 -- try commit(.complete); try store.export(to:item.folder,manifest:manifest); progress(1)",
+        "ios/TennisApp/AnalysisEngine.swift:17 -- if try store.status() == .complete { return }",
+        "ios/Sources/TennisCore/AnalysisStore.swift:138 -- if FileManager.default.fileExists(atPath:target.path) { _ = try FileManager.default.replaceItemAt(target,withItemAt:temporary) }"
+      ],
+      "pre_existing": false
+    }
+  ],
+  "residual_risks": [
+    "Native analysis has no process-wide or file lock around analysis.sqlite; multiple app scenes could potentially start separate AnalysisEngine actors for the same match, but the reviewed UI does not establish that this is reachable in normal use.",
+    "Failure-injection behavior for native disk-full and file-replacement errors was not executed because this review was source-only.",
+    "The supplied 180-versus-179 native/ffprobe count difference remains under root investigation and is not classified here as a decoding defect or a passing result."
+  ],
+  "testing_gaps": [
+    "No native test injects an AnalysisStore.export failure after the final checkpoint and proves a retry repairs the portable artifacts.",
+    "The simulator guard has no fixture whose valid AVFoundation decode count differs from ffprobe, so its oracle mismatch is not covered.",
+    "No native lifecycle test opens the same match from two scenes and verifies single-writer behavior."
+  ]
+}

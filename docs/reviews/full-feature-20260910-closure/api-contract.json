@@ -1,0 +1,33 @@
+{
+  "reviewer": "api-contract",
+  "findings": [
+    {
+      "title": "Swift round-trip drops pose and racket ownership",
+      "severity": "P1",
+      "file": "ios/Sources/TennisCore/Contract.swift",
+      "line": 71,
+      "why_it_matters": "A desktop-generated portable package loses every player's pose keypoints and each racket's player_id after iOS imports and re-exports it. The iOS importer decodes frames into these narrower Codable structs, stores that decoded representation, and AnalysisStore.export serializes it again, so the loss is permanent and downstream desktop review can no longer render the original pose data or retain racket ownership. Representing both optional fields in the Swift frame types preserves the established v1 frame contract while remaining compatible with iOS-produced records that omit them.",
+      "autofix_class": "gated_auto",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "suggested_fix": "Add an optional pose field with the Python keypoint shape to Player and an optional playerId field to Detection, then extend the shared fixture and Swift round-trip test to assert that pose and player_id survive decode followed by encode.",
+      "confidence": 100,
+      "evidence": [
+        "ios/Sources/TennisCore/Contract.swift:71-73 -- public struct Player: Codable, Equatable, Sendable {\n    public var id: Int; public var box: [Double]; public var confidence: Double; public var label: String?\n    public init(id: Int, box: [Double], confidence: Double) { self.id = id; self.box = box; self.confidence = confidence }",
+        "ios/Sources/TennisCore/Contract.swift:66-68 -- public struct Detection: Codable, Equatable, Sendable {\n    public var box: [Double]; public var confidence: Double\n    public init(box: [Double], confidence: Double) { self.box = box; self.confidence = confidence }",
+        "contracts/README.md:17-20 -- Frames retain the existing v1 record fields: schema_version (1 or 2), frame, timestamp, scene, cut, camera_moving, court (nullable: matrix/points/source), players (id, box xyxy, confidence, optional pose/label), rackets, ball_candidates, ball (status observed|interpolated|missing, xy nullable, confidence nullable).",
+        "src/tennis_ai/geometry.py:98 -- players[i][\"pose\"] = poses[j][\"pose\"]",
+        "src/tennis_ai/geometry.py:120 -- racket[\"player_id\"] = None",
+        "ios/Sources/TennisCore/AnalysisStore.swift:134 -- while code==SQLITE_ROW { try handle.write(contentsOf:rowData(s,column:0)); try handle.write(contentsOf:Data([10])); code=sqlite3_step(s) }"
+      ],
+      "pre_existing": false
+    }
+  ],
+  "residual_risks": [
+    "Python stores durable event edit records under an additive corrections.json events key that Swift intentionally ignores. Current events.json import/export preserves the resulting event records, but a future regeneration workflow that relies only on corrections.json could discard those edits unless the durable-edit contract is formalized across both runtimes."
+  ],
+  "testing_gaps": [
+    "The shared frames fixture has neither player pose keypoints nor racket player_id, so the advertised Python-to-Swift-to-JSON frame round-trip does not exercise the lossy fields.",
+    "No cross-runtime test compares Python and Swift verified statistics for a manual, non-excluded event whose reviewed flag is false; Python requires reviewed while Swift currently accepts reviewed OR manual."
+  ]
+}

@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using these metadata."
+title: "Tennis AI Local: private, offline tennis video analysis"
+type: software
+authors:
+  - family-names: Yang
+    given-names: Yunbo (Paul)
+repository-code: "https://github.com/Paulyang5049/Tennis-AI-Tracker"
+license: AGPL-3.0-only
+version: 0.2.0
+date-released: 2026-09-05
+keywords:
+  - tennis
+  - computer vision
+  - sports analytics
+  - ball tracking
+  - pose estimation
+  - offline

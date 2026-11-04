@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "purpose": "acquisition-status-not-evaluation-input",
+  "cohorts": [
+    {"category": "phone-singles", "minimum_test_matches": 5, "available_verified_matches": 0, "status": "awaiting_footage_and_labels"},
+    {"category": "phone-doubles", "minimum_test_matches": 5, "available_verified_matches": 0, "status": "awaiting_footage_and_labels"}
+  ],
+  "release_ready": false
+}

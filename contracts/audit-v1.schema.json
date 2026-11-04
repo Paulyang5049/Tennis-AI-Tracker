@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "id",
+    "sequence",
+    "entity_id",
+    "actor",
+    "timestamp",
+    "reason",
+    "before",
+    "after"
+  ],
+  "properties": {
+    "entity_type": {"enum": ["event", "assignment", "participant", "rally", "link"]},
+    "schema_version": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "entity_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "before": {
+      "anyOf": [{"type": "null"}, {"$ref": "#/$defs/entity"}]
+    },
+    "after": {
+      "$ref": "#/$defs/entity"
+    }
+  },
+  "$defs": {
+    "entity": {"oneOf": [
+      {"$ref": "events-v2.schema.json#/$defs/event"},
+      {"$ref": "events-v3.schema.json#/properties/assignments/items"},
+      {"$ref": "events-v3.schema.json#/properties/participants/items"},
+      {"$ref": "events-v3.schema.json#/properties/links/items"},
+      {"$ref": "rallies-v1.schema.json#/properties/rallies/items"}
+    ]}
+  },
+  "additionalProperties": false
+}

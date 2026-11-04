@@ -1,0 +1,16 @@
+{
+  "date": "2026-09-13",
+  "scope": "Incremental U2/U3 quality, positions and generic audit recovery",
+  "python_tests": {"passed": 112, "total": 112},
+  "swift_tests": {"passed": 19, "total": 19},
+  "shared_entity_audit_fixture": "passed_in_both_runtimes",
+  "independent_review": "partial_usage_limit; returned_replay_order_finding_fixed",
+  "previous_ci_commit": "78e649fc655af719523ed383e8ab4c93b40d19e1",
+  "previous_ci_tests_run": 34622878477,
+  "previous_ci_ios_run": 34622878381,
+  "previous_simulator_artifact_archive_integrity": "passed",
+  "phone_accuracy": "not_measured",
+  "physical_device": "not_measured",
+  "model_promotion": "none",
+  "note": "Software regression evidence only. U2/U3 integration and U4-U6 remain unfinished."
+}

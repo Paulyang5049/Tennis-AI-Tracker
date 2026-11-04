@@ -1,10 +1,31 @@
 # Validation report
 
-Last local run: 2026-09-05 on an Apple M4 MacBook Air with 16 GB RAM, Python 3.11.15.
+Baseline local run: 2026-09-05 on an Apple M4 MacBook Air with 16 GB RAM, Python 3.11.15.
+
+## Offline upgrade and interface checks — 2026-09-08 to 10
+
+- Python: 72 tests passed; Ruff lint/format and mypy passed after integration.
+- Desktop browser: actual upload, analysis, cancellation/resume, library refresh/reopen, synchronized replay, exact-frame images, player-label and four-corner saves, reviewed event persistence and MP4 clip download exercised. Automated integration tests separately verify audio preservation and portable cached re-export.
+- Layout: 1440 px desktop and 390 px mobile have no horizontal overflow across the four sections. Keyboard focus is visible and moves from Analyze to Cancel; reduced-motion disables transitions. Light/dark rendering inspected, with no JavaScript errors in the exercised workflow. This is a scoped accessibility check, not a full assistive-technology audit.
+- Real Apple MPS recovery: a 90-frame broadcast clip produced byte-identical `frames.jsonl` after interrupted/resumed versus uninterrupted analysis. This does not establish two-hour stability.
+- Core ML: real YOLO26s 640 FP16 export, recursive checksum verification and macOS prediction passed. The bundled model also loaded and ran inside the iOS 27 simulator. No labelled parity or phone accuracy result exists.
+- Swift: all 12 XCTest core tests passed using Xcode 27 beta (27A5252f); simulator and unsigned iOS device builds succeeded with minimum deployment target iOS 26. Only per-command `DEVELOPER_DIR` was set.
+- Native simulator integration: `ios/check_simulator.py` builds an isolated check app using the production importer, engine, detector, SQLite store and clip exporter. A synthetic H.264 B-frame video with a sine audio track imported and analyzed all 12 frames; its 0.4-second export retained the full duration and one audio track. Review-frame access, reviewed-hit persistence and analysis-package export/re-import passed. A three-second excerpt of the supplied broadcast also passed with 179 decoded frames matching FFmpeg, a 2.1-second audio clip, and rejection of partial, missing-artifact and oversized imports. These checks fixed decoded timestamp origin and empty edit-list frame handling. Pose/racket ownership survives SQLite export, and verified statistics consistently require reviewed events.
+- Native app launch succeeded in the iPhone 17 Pro / iOS 27 simulator. The integration check invokes production functions; it does not establish a completed tap-by-tap SwiftUI/file-picker workflow. That UI check, signed phone installation, performance, heat, battery and two-hour tests remain unverified.
+- README: original banner, published UI screenshot, development UI screenshot and workflow illustration were pushed separately to main; all four images loaded on the actual GitHub page. The redesigned UI is explicitly labelled a development preview.
+- Nine local review lenses and an independent 12-candidate validation batch returned results. The coordinator hit its account limit after validation; the primary agent completed synthesis and tested the final fixes. No external cross-model review ran. See `docs/reviews/full-feature-20260910-closure/review.json`.
+
+## Full broadcast check — 2026-09-10
+
+The user-supplied 11-minute-34-second clip completed desktop processing with 41,564 output frames and AAC audio. JSONL frame indices were contiguous and timestamps strictly increasing; the review database contained the same 41,564 unique frame indices. Browser reopening, synchronized playback and point-event export passed. The approximately four-second point clip retained audio.
+
+Observed ball coverage was 49.56%, interpolated coverage 6.53%, and court calibration coverage 50.55%. The system produced 112 hit, 54 bounce and 24 rally candidates, all unreviewed, with zero confirmed events. Inspection found a ball false positive on the scoreboard serve icon and unstable player IDs; no labelled accuracy metric is available. Runtime recorded in the resumed summary is not the accumulated time across interruptions.
+
+The [checked-in snapshot](docs/data/validation-2026-09-10.json) drives the README charts. The full source video, derived video and detailed local logs remain outside version control. iOS README screenshots use a separate solid-green UI fixture and do not represent this full-video run.
 
 ## Development-build visual report — 2026-09-10
 
-The README charts and iOS screenshots describe [development revision 5c064e5](https://github.com/Paulyang5049/Tennis-AI-Tracker/tree/5c064e5/), rather than main-branch functionality. Python 72 tests and Swift 12 tests passed. Native integration on a real three-second excerpt retained 179 frames matching FFmpeg and a 2.1-second clip with audio. Signed-device performance and detection accuracy remain unverified.
+The README charts and iOS screenshots were produced from [development revision 5c064e5](https://github.com/Paulyang5049/Tennis-AI-Tracker/tree/5c064e5/) of the offline upgrade. Python 72 tests and Swift 12 tests passed. Native integration on a real three-second excerpt retained 179 frames matching FFmpeg and a 2.1-second clip with audio. Signed-device performance and detection accuracy remain unverified.
 
 ## Full broadcast check — 2026-09-10
 
@@ -43,3 +64,12 @@ The broadcast smoke run reported 73.3% observed-ball coverage, 13.3% interpolate
 - Phone singles, phone doubles and broadcast doubles accuracy require representative videos plus held-out annotations. The included evaluator reports per-category results once those labels exist.
 - The court dataset archive download and its redistribution terms were not independently confirmed. The notebook stops with a clear error and retains the pretrained model if the archive is unavailable.
 - Scene-cut and camera-motion detection are heuristic. Dissolves, zooms and rapid pans need validation on the target footage.
+
+## Gap-tolerant hit candidates — 2026-11-04
+
+Thirteen user-supplied broadcast clips (two matches, 1920×1080 at 25 fps, 3,786 frames, all tagged as slice examples) were analysed with the default pipeline on an Apple M4 at about 7.3 frames per second. The clips and outputs remain outside version control. No human contact labels exist, so the figures below are development evidence, not accuracy.
+
+- Ball positions: 128 randomly sampled observed positions were inspected; about 126 were the match ball. One run of six frames selected a spare ball held by a ball kid. No scoreboard false positive occurred.
+- Contacts were approximated by trajectory changes between the near and far halves of the image. `baseline-v1` placed a hit candidate within those contact windows for 28 of 78 contacts in the tuning match and 6 of 23 in the other match. For most missed contacts the ball was unobserved for at least two of the seven frames around the contact.
+- `contact-v2` (opt-in) covered 74 of 78 and 22 of 23 of the same windows, from cached frames. A visual check of 24 candidates found only by `contact-v2` judged 19 as real hits; the false ones were serve tosses at clip start and movement after a dead ball. Five of 103 consecutive hit pairs repeated the same player.
+- Contact timing was not validated; far-court contacts may be offset by 0.1–0.3 s. The near-side confirmation line was tightened after a serve-toss false positive in the tuning match; the same failure also appeared in the other match, so it is not a fully untouched test.

@@ -1,0 +1,31 @@
+# Pre-submission review, 29 September 2026
+
+Scope: `tennis_evidence_system.tex` and the checked-in evidence available at this revision. This is a technical system paper intended for arXiv. A verified arXiv account permits access to submission, but category endorsement and moderation are separate checks. arXiv describes submissions as topical, refereeable scientific contributions.
+
+## Priority findings
+
+| Severity | Finding | Evidence and required action |
+| --- | --- | --- |
+| **Critical** | There is no independent evaluation of the paper's main practical proposition: that the review workflow produces usable, inspectable tennis statistics at an acceptable review cost. | `benchmarks/acquisition.json` records zero verified phone singles matches. The 190 broadcast candidates were unreviewed. Acquire permission-cleared clips from distinct matches and run `REVIEWER_STUDY.md` with two independent reviewers and an adjudicator. Report all match-level outcomes, including failures. If this cannot be done, seek an external scholarly assessment of a more limited software note before submission. |
+| **Critical** | No event accuracy can be inferred from the present processing run. | Frame coverage and candidate counts have no independent event labels. Keep accuracy, coaching effectiveness, and phone performance claims out of the abstract and conclusion until the separate held-out evaluation is complete. |
+| **Major** | The initial literature position missed close tennis work, including a prior coaching/annotation system, F3Set, and TennisVAR. | The manuscript now cites these along with RacketVision, a tennis tracking/court-keypoint pipeline, and EventAnchor. It states the narrower evidence-eligibility question without claiming that tennis analysis interfaces or event evidence were introduced here. Check this positioning again at submission time. |
+| **Major** | A universal claim that every non-null human-verified statistic resolves to source media needs an end-to-end audit. | The review found that a zero-valued stroke category lacked a reference to its eligible-hit denominator. Python and Swift now record those hit IDs as support references, with fixture tests. The planned reviewer study must still audit every metric class against real source media before a universal traceability claim is made. |
+| **Major** | The evidence path figure is a simple schematic and the only measured video example is broadcast footage. | Add a permission-cleared, concrete failure-and-correction example from the target fixed-camera setting after study acquisition. Show the original candidate, reviewer decision, support references, and resulting report change. Do not use the local broadcast highlights file as a paper figure without rights review. |
+| **Major** | The current paper may be a weak fit for a primary `cs.CV` classification while it has no independently measured vision result. | After the reviewer study, choose the primary category according to the actual contribution and results. The account's default category does not decide the manuscript's subject, and a new category may require endorsement. |
+| **Major** | The original reviewer-study text applied a point-event timing tolerance to rally intervals. | The protocol now uses the checked-in benchmark's one-to-one rule: 0.1 seconds for hits and bounces, interval overlap of at least 0.5 for rallies. Blank private recording sheets and result table shells are in `STUDY_PACKET.md`. |
+| **Minor** | The introduction needed a clear research question and contributions; the study paragraph needed predeclared outcomes. | Both are now explicit in the manuscript. The synthetic example remains clearly labelled as constructed evidence. |
+
+## Checks completed
+
+- Manuscript LaTeX compiled in the Codex desktop editor after the related-work and methods revision.
+- Python: 129 tests, static type check, and lint/format checks passed. Swift: 37 tests and the unsigned iOS simulator build passed. Ten complete Python/Swift fixture reports matched after the denominator-reference change. These are development checks, not reviewer-study results.
+- After the study-protocol correction, all 29 event/benchmark tests passed and the manuscript compiled again. The packet's local references resolve.
+- The study summary tool now checks frozen candidate digests, distinct match codes, complete trace-audit rows, and annotation coverage before producing descriptive counts. Its three synthetic tests pass; the full Python suite has 133 passing tests. Constructed report tests exercise support references for all metric families. No real study records or source-media checks were used.
+- New reference titles, authors, dates, and abstracts were checked against their arXiv records: [TennisVAR](https://arxiv.org/abs/2608.12920), [RacketVision](https://arxiv.org/abs/2511.17045), [CalTennis](https://arxiv.org/abs/2606.20542), and [Desu and Ali](https://arxiv.org/abs/2511.04126). [EventAnchor](https://arxiv.org/abs/2101.04954), [TrackNet](https://arxiv.org/abs/1907.03698), and [YOLO26](https://arxiv.org/abs/2606.03748) were also checked.
+- The public `tenis_backview` archive contains ten MP4s of 5.93–17.07 seconds by local `ffprobe` inspection. None meets the study's 5–10 minute clip requirement. The paper source still compiles after adding the CalTennis comparison.
+- [F3Set](https://arxiv.org/abs/2504.08222) was checked against its arXiv record and ICLR version; the 2010 [Kelly et al. system](https://vcl.iti.gr/publications/a-low-cost-performance-analysis-and-coaching-system-for-tennis/) was checked against the authors' lab publication page.
+- The manuscript contains no banned AI-tone terms from the review checklist or em dash connectors. `git diff --check` passes.
+
+## Release decision
+
+**Not ready for arXiv submission as a validated tennis-analysis research paper.** Its current form is a transparent preliminary system report. Completion requires independent reviewer results or a deliberately narrower scholarly contribution that an external reader can assess, then author approval of claims, rights, final PDF, source files, metadata, and category/endorsement. Do not turn the study protocol into past-tense results until its frozen records exist.

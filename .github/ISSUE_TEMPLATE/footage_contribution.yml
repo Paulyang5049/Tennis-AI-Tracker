@@ -1,0 +1,51 @@
+name: Tennis footage contribution
+description: Describe permission-cleared footage for phone evaluation before sharing files.
+title: "[Footage] "
+labels: [data]
+body:
+  - type: markdown
+    attributes:
+      value: "Describe the dataset here. Do not upload private videos or personal contact information to this public issue. A maintainer will agree on a suitable transfer route."
+  - type: dropdown
+    id: setting
+    attributes:
+      label: Recording setting
+      options:
+        - Fixed phone singles
+        - Fixed phone doubles
+        - Broadcast or other
+    validations:
+      required: true
+  - type: textarea
+    id: provenance
+    attributes:
+      label: Recording provenance and permissions
+      description: Explain ownership, participant permission, and permitted evaluation, training and redistribution separately. No names or contact details are needed.
+    validations:
+      required: true
+  - type: textarea
+    id: matches
+    attributes:
+      label: Original matches and split history
+      description: Give anonymous original match IDs, clip counts and durations. Identify related clips and whether this footage has previously been used for model training or tuning.
+    validations:
+      required: true
+  - type: textarea
+    id: video
+    attributes:
+      label: Video properties and scene coverage
+      description: Device, resolution, frame rate or VFR, orientation, camera placement, lighting, near/far ball visibility, occlusion and end changes.
+    validations:
+      required: true
+  - type: textarea
+    id: annotations
+    attributes:
+      label: Annotation availability
+      description: Describe labelled frames, explicit negative frames/time, contact/rally labels, stroke classes, landing positions and independent review. Unlabelled data is welcome but is not validation evidence.
+  - type: checkboxes
+    id: acknowledgement
+    attributes:
+      label: Sharing acknowledgement
+      options:
+        - label: I will confirm participant and owner permissions before transferring identifiable footage, and will state any restrictions.
+          required: true

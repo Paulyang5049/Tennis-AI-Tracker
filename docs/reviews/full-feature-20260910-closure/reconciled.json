@@ -1,0 +1,321 @@
+[
+  {
+    "reviewer": "synthesis",
+    "findings": [
+      {
+        "#": 1,
+        "autofix_class": "gated_auto",
+        "confidence": 100,
+        "evidence": [
+          "ios/Sources/TennisCore/Contract.swift:71-73 -- public struct Player: Codable, Equatable, Sendable {\n    public var id: Int; public var box: [Double]; public var confidence: Double; public var label: String?\n    public init(id: Int, box: [Double], confidence: Double) { self.id = id; self.box = box; self.confidence = confidence }",
+          "ios/Sources/TennisCore/Contract.swift:66-68 -- public struct Detection: Codable, Equatable, Sendable {\n    public var box: [Double]; public var confidence: Double\n    public init(box: [Double], confidence: Double) { self.box = box; self.confidence = confidence }",
+          "contracts/README.md:17-20 -- Frames retain the existing v1 record fields: schema_version (1 or 2), frame, timestamp, scene, cut, camera_moving, court (nullable: matrix/points/source), players (id, box xyxy, confidence, optional pose/label), rackets, ball_candidates, ball (status observed|interpolated|missing, xy nullable, confidence nullable).",
+          "src/tennis_ai/geometry.py:98 -- players[i][\"pose\"] = poses[j][\"pose\"]",
+          "src/tennis_ai/geometry.py:120 -- racket[\"player_id\"] = None",
+          "ios/Sources/TennisCore/AnalysisStore.swift:134 -- while code==SQLITE_ROW { try handle.write(contentsOf:rowData(s,column:0)); try handle.write(contentsOf:Data([10])); code=sqlite3_step(s) }"
+        ],
+        "file": "ios/Sources/TennisCore/Contract.swift",
+        "first_evidence": "ios/Sources/TennisCore/Contract.swift:71-73 -- public struct Player: Codable, Equatable, Sendable {\n    public var id: Int; public var box: [Double]; public var confidence: Double; public var label: String?\n    public init(id: Int, box: [Double], confidence: Double) { self.id = id; self.box = box; self.confidence = confidence }",
+        "independent_reviewers": [
+          "api-contract"
+        ],
+        "line": 71,
+        "owner": "downstream-resolver",
+        "pre_existing": false,
+        "requires_verification": true,
+        "reviewers": [
+          "api-contract"
+        ],
+        "severity": "P1",
+        "suggested_fix": "Add an optional pose field with the Python keypoint shape to Player and an optional playerId field to Detection, then extend the shared fixture and Swift round-trip test to assert that pose and player_id survive decode followed by encode.",
+        "title": "Swift round-trip drops pose and racket ownership",
+        "why_it_matters": "A desktop-generated portable package loses every player's pose keypoints and each racket's player_id after iOS imports and re-exports it. The iOS importer decodes frames into these narrower Codable structs, stores that decoded representation, and AnalysisStore.export serializes it again, so the loss is permanent and downstream desktop review can no longer render the original pose data or retain racket ownership. Representing both optional fields in the Swift frame types preserves the established v1 frame contract while remaining compatible with iOS-produced records that omit them."
+      },
+      {
+        "#": 2,
+        "autofix_class": "gated_auto",
+        "confidence": 100,
+        "evidence": [
+          "ios/TennisApp/Library.swift:73-74 -- if FileManager.default.fileExists(atPath:input.path) { try FileManager.default.copyItem(at:input,to:target) } else if relative==manifest.media.path { throw PackageError.invalid(\"Source video is missing from package\") }",
+          "ios/TennisApp/Library.swift:82 -- if FileManager.default.fileExists(atPath:frames.path) { try store.importFrames(from:frames) }",
+          "ios/TennisApp/Library.swift:90-91 -- if FileManager.default.fileExists(atPath:corrections.path) { try store.saveCorrections(ContractJSON.read(Corrections.self,from:corrections)) }; try store.setStatus(.complete)"
+        ],
+        "file": "ios/TennisApp/Library.swift",
+        "first_evidence": "ios/TennisApp/Library.swift:73-74 -- if FileManager.default.fileExists(atPath:input.path) { try FileManager.default.copyItem(at:input,to:target) } else if relative==manifest.media.path { throw PackageError.invalid(\"Source video is missing from package\") }",
+        "independent_reviewers": [
+          "correctness",
+          "swift-ios"
+        ],
+        "line": 73,
+        "owner": "downstream-resolver",
+        "pre_existing": false,
+        "requires_verification": true,
+        "reviewers": [
+          "correctness",
+          "swift-ios"
+        ],
+        "severity": "P1",
+        "suggested_fix": "Reject a package when any required artifact declared by manifest.artifacts is missing, import each required file, and initialize the store status from manifest.status instead of unconditionally setting .complete; only a manifest that is complete should produce a complete imported store. Reject incomplete imports or provide a fully consistent resume identity and state.",
+        "title": "Incomplete imports are silently marked complete",
+        "why_it_matters": "An analysis folder missing frames, events, or corrections is accepted, and the new store is then marked complete. A damaged transfer can therefore appear successfully imported while silently losing predictions or durable human edits; the Start/Continue action also returns immediately because the store says complete. Requiring the declared artifacts and preserving the manifest status prevents corrupt or paused packages from being converted into false completions."
+      },
+      {
+        "#": 4,
+        "autofix_class": "manual",
+        "confidence": 100,
+        "file": "ios/TennisApp/TennisApp.swift",
+        "first_evidence": "ios/TennisApp/TennisApp.swift:154: func saveCourt() { perform { _=try Court(points:corners); guard let store else { throw PackageError.invalid(\"\u8bf7\u5148\u5f00\u59cb\u5206\u6790\u4ee5\u5efa\u7acb\u8bb0\u5f55\") }; var c=try store.corrections(); c.court[String(frame?.scene ?? 0)]=corners; try store.saveCorrections(c); calibrating=false } }",
+        "independent_reviewers": [
+          "adversarial"
+        ],
+        "line": 154,
+        "owner": "downstream-resolver",
+        "pre_existing": false,
+        "requires_verification": true,
+        "reviewers": [
+          "adversarial"
+        ],
+        "severity": "P1",
+        "suggested_fix": "Store iOS court corrections by frame index and resolve applicable corrections within the same scene for inference, cached review and export. Add a nonzero-frame, multi-scene cross-platform roundtrip test.",
+        "title": "Court correction roundtrip changes its frame scope",
+        "why_it_matters": "Historical candidate requires current-tree closure verification; its original defect would affect court correction roundtrip changes its frame scope. Current source may already resolve it.",
+        "evidence": [
+          "ios/TennisApp/TennisApp.swift:154: func saveCourt() { perform { _=try Court(points:corners); guard let store else { throw PackageError.invalid(\"\u8bf7\u5148\u5f00\u59cb\u5206\u6790\u4ee5\u5efa\u7acb\u8bb0\u5f55\") }; var c=try store.corrections(); c.court[String(frame?.scene ?? 0)]=corners; try store.saveCorrections(c); calibrating=false } }"
+        ]
+      },
+      {
+        "#": 5,
+        "autofix_class": "gated_auto",
+        "confidence": 100,
+        "file": "ios/TennisApp/TennisApp.swift",
+        "first_evidence": "ios/TennisApp/TennisApp.swift:24 -- VStack(alignment:.leading) { Text(item.title); Text(\"\\(Int(item.manifest.media.duration)) \u79d2 \u00b7 \\(ByteCountFormatter.string(fromByteCount:LocalLibrary.diskUsage(item),countStyle:.file))\").font(.caption) }",
+        "independent_reviewers": [
+          "security"
+        ],
+        "line": 24,
+        "owner": "downstream-resolver",
+        "pre_existing": false,
+        "requires_verification": true,
+        "reviewers": [
+          "security"
+        ],
+        "severity": "P1",
+        "suggested_fix": "Replace the trapping Int conversion with finite Double formatting or Int(exactly: duration.rounded(.towardZero)) plus fallback. A completed package with duration 1e100 currently passes validation, persists successfully, then crashes library rendering on every launch. Add an import/reload regression for this package.",
+        "title": "CWE-20: Imported duration can permanently crash library",
+        "why_it_matters": "Historical candidate requires current-tree closure verification; its original defect would affect cwe-20: imported duration can permanently crash library. Current source may already resolve it.",
+        "evidence": [
+          "ios/TennisApp/TennisApp.swift:24 -- VStack(alignment:.leading) { Text(item.title); Text(\"\\(Int(item.manifest.media.duration)) \u79d2 \u00b7 \\(ByteCountFormatter.string(fromByteCount:LocalLibrary.diskUsage(item),countStyle:.file))\").font(.caption) }"
+        ]
+      },
+      {
+        "#": 6,
+        "autofix_class": "gated_auto",
+        "confidence": 100,
+        "evidence": [
+          "src/tennis_ai/app.py:319 -- return str(export_clip(folder, start, end))",
+          "src/tennis_ai/library.py:58 -- or not 0 <= start < end <= summary[\"video\"][\"duration\"]",
+          "src/tennis_ai/events.py:35-36 -- if event[\"kind\"] != \"rally\" and event[\"end\"] != event[\"start\"]: raise ValueError(\"Point events must have identical start/end times\")"
+        ],
+        "file": "src/tennis_ai/app.py",
+        "first_evidence": "src/tennis_ai/app.py:319 -- return str(export_clip(folder, start, end))",
+        "independent_reviewers": [
+          "correctness"
+        ],
+        "line": 319,
+        "owner": "downstream-resolver",
+        "pre_existing": false,
+        "requires_verification": true,
+        "reviewers": [
+          "correctness"
+        ],
+        "severity": "P1",
+        "suggested_fix": "In make_clip, load the video duration and convert start == end into a bounded window such as max(0, start - 2) through min(duration, end + 2), matching ios/TennisApp/AnalysisEngine.swift; keep explicit start/end for rallies.",
+        "title": "Point-event clip export always rejects",
+        "why_it_matters": "Users cannot export clips for hits or bounces from the desktop event UI: the shared event contract requires point events to have end equal to start, while this handler forwards that zero-length interval to an exporter that requires start to be strictly less than end. Every normal hit/bounce reaches the same deterministic error. Expanding point events to a bounded interval around the timestamp, as the iOS ClipExporter already does, makes the advertised event export usable while preserving rally intervals."
+      },
+      {
+        "#": 7,
+        "autofix_class": "gated_auto",
+        "confidence": 75,
+        "evidence": [
+          "ios/TennisApp/AnalysisEngine.swift:65 -- try commit(.complete); try store.export(to:item.folder,manifest:manifest); progress(1)",
+          "ios/TennisApp/AnalysisEngine.swift:17 -- if try store.status() == .complete { return }",
+          "ios/Sources/TennisCore/AnalysisStore.swift:138 -- if FileManager.default.fileExists(atPath:target.path) { _ = try FileManager.default.replaceItemAt(target,withItemAt:temporary) }"
+        ],
+        "file": "ios/TennisApp/AnalysisEngine.swift",
+        "first_evidence": "ios/TennisApp/AnalysisEngine.swift:65 -- try commit(.complete); try store.export(to:item.folder,manifest:manifest); progress(1)",
+        "independent_reviewers": [
+          "reliability"
+        ],
+        "line": 65,
+        "owner": "downstream-resolver",
+        "pre_existing": false,
+        "requires_verification": true,
+        "reviewers": [
+          "reliability"
+        ],
+        "severity": "P1",
+        "suggested_fix": "At end of analysis, checkpoint the final batch with a nonterminal status, export all portable artifacts, then atomically set the store and manifest to complete. Alternatively, when store.status is complete, verify/export the artifacts before returning so a failed export is resumable.",
+        "title": "Completion is committed before portable export succeeds",
+        "why_it_matters": "A native analysis can be recorded as complete even when writing frames.jsonl, events.json, corrections.json, or manifest.json fails. On the next attempt, the early complete-status return skips both analysis and export, so the user is left with stale or empty interoperable artifacts and no automatic recovery path. Exporting first and committing complete only after all artifacts succeed keeps the resumable database status aligned with the package users can actually open."
+      },
+      {
+        "#": 8,
+        "autofix_class": "gated_auto",
+        "confidence": 75,
+        "evidence": [
+          "ios/TennisApp/TennisApp.swift:35 -- Task { do { if package { _=try LocalLibrary.importPackage(url) } else { _=try await LocalLibrary.importVideo(url,players:players) }; try reload() } catch { self.error=error.localizedDescription }; busy=false }",
+          "ios/TennisApp/Library.swift:73 -- if FileManager.default.fileExists(atPath:input.path) { try FileManager.default.copyItem(at:input,to:target) }",
+          "ios/TennisApp/Library.swift:76 -- guard try hash(PackageIO.asset(manifest.media.path,in:folder))==manifest.media.sha256 else { throw PackageError.invalid(\"Package video checksum does not match manifest\") }",
+          "ios/TennisApp/Library.swift:82 -- if FileManager.default.fileExists(atPath:frames.path) { try store.importFrames(from:frames) }"
+        ],
+        "file": "ios/TennisApp/TennisApp.swift",
+        "first_evidence": "ios/TennisApp/TennisApp.swift:35 -- Task { do { if package { _=try LocalLibrary.importPackage(url) } else { _=try await LocalLibrary.importVideo(url,players:players) }; try reload() } catch { self.error=error.localizedDescription }; busy=false }",
+        "independent_reviewers": [
+          "swift-ios"
+        ],
+        "line": 35,
+        "owner": "downstream-resolver",
+        "pre_existing": false,
+        "requires_verification": true,
+        "reviewers": [
+          "swift-ios"
+        ],
+        "severity": "P1",
+        "suggested_fix": "Make package import asynchronous and run LocalLibrary.importPackage in a detached or dedicated actor task with explicit cancellation checks; await its result before calling the main-actor reload and error-state updates.",
+        "title": "Package import blocks the main actor",
+        "why_it_matters": "Importing a large analysis folder can freeze the entire interface while it copies the source video, hashes it, decodes every JSONL frame, and populates SQLite. The import is invoked synchronously from a SwiftUI task, so the progress overlay cannot remain responsive and a multi-gigabyte package can be terminated by the watchdog. Move the synchronous package pipeline to a non-main executor and publish only the final state transition on the main actor."
+      },
+      {
+        "#": 9,
+        "autofix_class": "gated_auto",
+        "confidence": 100,
+        "evidence": [
+          "ios/Sources/TennisCore/Contract.swift:121 -- if let p = position { guard p.count == 2, p.allSatisfy(\\.isFinite) else { throw PackageError.invalid(\"Invalid court position\") } }",
+          "ios/TennisApp/Library.swift:87 -- for event in events.events { try store.saveEvent(event,duration:manifest.media.duration) }",
+          "src/tennis_ai/events.py:59-60 -- if event[\"kind\"] != \"bounce\" or not isinstance(point, (list, tuple)) or len(point) != 2: raise ValueError(\"Only bounce events can have a court position [x, y]\")"
+        ],
+        "file": "ios/Sources/TennisCore/Contract.swift",
+        "first_evidence": "ios/Sources/TennisCore/Contract.swift:121 -- if let p = position { guard p.count == 2, p.allSatisfy(\\.isFinite) else { throw PackageError.invalid(\"Invalid court position\") } }",
+        "independent_reviewers": [
+          "correctness"
+        ],
+        "line": 121,
+        "owner": "downstream-resolver",
+        "pre_existing": false,
+        "requires_verification": true,
+        "reviewers": [
+          "correctness"
+        ],
+        "severity": "P2",
+        "suggested_fix": "In AnalysisEvent.validate, reject non-nil position unless kind == .bounce, then add a shared-fixture/import test for a hit carrying position and assert that both Swift and Python reject it.",
+        "title": "Swift accepts positions on non-bounce events",
+        "why_it_matters": "A portable package containing a hit or rally with a position passes the Swift importer and can be re-exported, but the desktop contract validator rejects the same record because court positions are bounce-only. That breaks round-trip interoperability for an input the native side claims is valid. Enforcing the shared semantic rule in AnalysisEvent.validate keeps both implementations aligned."
+      },
+      {
+        "#": 10,
+        "autofix_class": "gated_auto",
+        "confidence": 100,
+        "evidence": [
+          "ios/TennisApp/AnalysisEngine.swift:24 -- reader.timeRange=CMTimeRange(start:CMTime(seconds:manifest.media.origin,preferredTimescale:60000),duration:CMTime(seconds:manifest.media.duration,preferredTimescale:60000))",
+          "ios/TennisApp/AnalysisEngine.swift:46 -- guard time.isFinite,time>=0,time>state.lastTimestamp else { return }",
+          "ios/README.md:38 -- \u4e3a\u4fdd\u6301\u53ef\u53d8\u5e27\u7387 PTS \u7684\u7cbe\u786e\u6062\u590d\uff0c\u5f53\u524d\u6062\u590d\u4ece\u89c6\u9891\u8d77\u59cb\u89e3\u7801\u5e76\u8df3\u8fc7\u5df2\u63d0\u4ea4\u65f6\u95f4\uff1b\u8df3\u8fc7\u90e8\u5206\u4e0d\u6267\u884c\u6a21\u578b\u63a8\u7406\u3002\u957f\u7247\u6062\u590d\u4f1a\u82b1\u65f6\u95f4\uff0c\u5c1a\u672a\u5b9e\u73b0 GOP \u968f\u673a\u5b9a\u4f4d\u52a0\u901f\u3002"
+        ],
+        "file": "ios/TennisApp/AnalysisEngine.swift",
+        "first_evidence": "ios/TennisApp/AnalysisEngine.swift:24 -- reader.timeRange=CMTimeRange(start:CMTime(seconds:manifest.media.origin,preferredTimescale:60000),duration:CMTime(seconds:manifest.media.duration,preferredTimescale:60000))",
+        "independent_reviewers": [
+          "performance"
+        ],
+        "line": 24,
+        "owner": "downstream-resolver",
+        "pre_existing": false,
+        "requires_verification": true,
+        "reviewers": [
+          "performance"
+        ],
+        "severity": "P2",
+        "suggested_fix": "When state.nextFrame is nonzero, set AVAssetReader.timeRange to begin at or just before state.lastTimestamp plus manifest.media.origin, allowing AVFoundation to decode the needed keyframe prefix, and keep the time > state.lastTimestamp guard. Verify resumed output against uninterrupted VFR and long-GOP fixtures.",
+        "title": "Resume decodes every previously completed frame",
+        "why_it_matters": "Resuming near the end of a long match starts AVAssetReader at the original media origin and decodes the entire completed prefix again, discarding each frame before inference. For the supported two-hour videos, repeated pauses can impose a large and growing restart delay and unnecessary decode energy. Starting the reader near the last committed timestamp while retaining the strict timestamp skip restores only the required GOP prefix and keeps VFR safety."
+      },
+      {
+        "#": 11,
+        "autofix_class": "gated_auto",
+        "confidence": 100,
+        "evidence": [
+          "ios/TennisApp/AnalysisEngine.swift:57 -- frame.court=try store.corrections().latestCourt(at:frame.frame)",
+          "ios/Sources/TennisCore/AnalysisStore.swift:55 -- public func corrections()throws->Corrections { try synchronized { try metadata(\"corrections\") ?? Corrections() } }",
+          "ios/Sources/TennisCore/AnalysisStore.swift:43 -- return try ContractJSON.decoder().decode(T.self,from:rowData(s,column:0))"
+        ],
+        "file": "ios/TennisApp/AnalysisEngine.swift",
+        "first_evidence": "ios/TennisApp/AnalysisEngine.swift:57 -- frame.court=try store.corrections().latestCourt(at:frame.frame)",
+        "independent_reviewers": [
+          "performance"
+        ],
+        "line": 57,
+        "owner": "downstream-resolver",
+        "pre_existing": false,
+        "requires_verification": true,
+        "reviewers": [
+          "performance"
+        ],
+        "severity": "P2",
+        "suggested_fix": "Load Corrections once before the decode loop and use the cached value for latestCourt lookups; if live edits during analysis must take effect, refresh the cache only at the existing 60-frame checkpoint boundary or version metadata so it reloads only after a change.",
+        "title": "Court corrections are decoded for every frame",
+        "why_it_matters": "Every analyzed frame performs a SQLite metadata query and JSON-decodes the complete corrections object. A two-hour 30 fps match invokes this path about 216,000 times, and the decoded dictionary grows as calibrations and labels are added. Caching corrections outside the frame loop removes this avoidable database and allocation work from the inference hot path."
+      },
+      {
+        "#": 12,
+        "autofix_class": "manual",
+        "confidence": 75,
+        "file": "ios/Sources/TennisCore/Contract.swift",
+        "first_evidence": "ios/Sources/TennisCore/Contract.swift:58 -- media.duration.isFinite, media.duration > 0, media.duration <= 7200, media.origin.isFinite,",
+        "independent_reviewers": [
+          "maintainability"
+        ],
+        "line": 58,
+        "owner": "downstream-resolver",
+        "pre_existing": false,
+        "requires_verification": true,
+        "reviewers": [
+          "maintainability"
+        ],
+        "severity": "P2",
+        "suggested_fix": "Choose whether 7200 seconds is part of the portable v2 contract. If it is, add the bound to contracts/analysis-v2.schema.json and enforce it in the Python loader; if it is only an iOS import policy, remove it from Manifest.validate and keep it in LocalLibrary.importVideo/importPackage with a policy-specific error. Add shared over-limit and boundary fixtures that both Python and Swift contract tests consume so platform validators cannot drift unnoticed.",
+        "title": "Repeated contract validators have already diverged",
+        "why_it_matters": "Historical candidate requires current-tree closure verification; its original defect would affect repeated contract validators have already diverged. Current source may already resolve it.",
+        "evidence": [
+          "ios/Sources/TennisCore/Contract.swift:58 -- media.duration.isFinite, media.duration > 0, media.duration <= 7200, media.origin.isFinite,"
+        ]
+      },
+      {
+        "#": 13,
+        "autofix_class": "gated_auto",
+        "confidence": 75,
+        "evidence": [
+          "ios/TennisApp/EventEditor.swift:40 -- try event.validate(duration:duration); save(event); dismiss()",
+          "ios/TennisApp/TennisApp.swift:126 -- .sheet(item:$editing) { event in EventEditor(event:event,duration:item.manifest.media.duration) { updated in perform { guard let store else { throw PackageError.invalid(\"\u8bf7\u5148\u5f00\u59cb\u5206\u6790\u4ee5\u5efa\u7acb\u8bb0\u5f55\") }; try store.saveEvent(updated,duration:item.manifest.media.duration); try refresh() } } }",
+          "ios/TennisApp/TennisApp.swift:129 -- func perform(_ action:()throws->Void) { do { try action() } catch { self.error=error.localizedDescription } }"
+        ],
+        "file": "ios/TennisApp/EventEditor.swift",
+        "first_evidence": "ios/TennisApp/EventEditor.swift:40 -- try event.validate(duration:duration); save(event); dismiss()",
+        "independent_reviewers": [
+          "swift-ios"
+        ],
+        "line": 40,
+        "owner": "downstream-resolver",
+        "pre_existing": false,
+        "requires_verification": true,
+        "reviewers": [
+          "swift-ios"
+        ],
+        "severity": "P2",
+        "suggested_fix": "Change save to `(AnalysisEvent) throws -> Void`, call it with `try save(event)`, and have ReviewView's sheet closure perform store.saveEvent and refresh without the non-throwing perform wrapper so EventEditor keeps the sheet open and renders its local error on failure.",
+        "title": "Failed event saves still dismiss editor",
+        "why_it_matters": "A SQLite or refresh failure discards the user's in-progress event form because the editor dismisses even though persistence failed. The parent records an alert after swallowing the error, but the edited values are already gone and must be re-entered. Let the save callback throw and dismiss only after persistence and refresh both succeed."
+      }
+    ],
+    "residual_risks": [],
+    "testing_gaps": []
+  }
+]

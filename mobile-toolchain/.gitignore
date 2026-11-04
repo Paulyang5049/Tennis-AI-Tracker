@@ -1,0 +1,4 @@
+.venv/
+exports/
+*.log
+environment.freeze.txt

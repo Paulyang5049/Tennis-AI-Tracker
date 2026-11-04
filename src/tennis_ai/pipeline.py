@@ -5,14 +5,25 @@ import json
 import sqlite3
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from tennis_ai import jobs
 from tennis_ai.artifacts import sha256
+from tennis_ai.events import create_event_detector
 from tennis_ai.geometry import associate_rackets, attach_poses, calibrate, ground_point, project
 from tennis_ai.models import Models
+from tennis_ai.package import (
+    atomic_json,
+    load_manifest,
+    relative_asset,
+    update_status,
+    write_manifest,
+)
+from tennis_ai.player_tracking import SceneRoles
+from tennis_ai.quality import quality_for_record, sharpness, summarize_quality
 from tennis_ai.render import Renderer
-from tennis_ai.tracking import BallTracker, SceneMonitor, interpolate
+from tennis_ai.tracking import SceneMonitor, create_ball_tracker, interpolate
 from tennis_ai.video import Cancelled, VideoWriter, decode, mux_audio, probe
 
 
@@ -22,12 +33,17 @@ class Settings:
     device: str = "auto"
     ball_bundle: str | None = None
     court_bundle: str | None = None
+    ball_tracker: str = "baseline-v1"
+    overlay_masks: list[list[float]] = field(default_factory=list)
+    event_detector: str = "baseline-v1"
 
     def __post_init__(self):
         if self.players not in (2, 4):
             raise ValueError("Choose singles (2) or doubles (4)")
         if self.device not in ("auto", "cpu", "mps", "cuda"):
             raise ValueError("Unknown inference device")
+        create_ball_tracker(self.ball_tracker, self.overlay_masks)
+        create_event_detector(self.event_detector)
 
 
 def connect(folder):
@@ -35,6 +51,7 @@ def connect(folder):
     connection.execute(
         "CREATE TABLE IF NOT EXISTS frames (idx INTEGER PRIMARY KEY, time REAL, data TEXT)"
     )
+    connection.execute("CREATE INDEX IF NOT EXISTS frame_time ON frames(time)")
     return connection
 
 
@@ -56,42 +73,192 @@ def select_players(players, court, limit, previous=None):
     return [player for _, player in sorted(candidates, key=lambda x: x[0], reverse=True)[:limit]]
 
 
+def fingerprints(root, settings, model_factory):
+    result = {"adapter": f"{model_factory.__module__}.{model_factory.__qualname__}"}
+    for module in (
+        "pipeline.py",
+        "tracking.py",
+        "models.py",
+        "jobs.py",
+        "geometry.py",
+        "video.py",
+        "quality.py",
+        "positions.py",
+        "player_tracking.py",
+    ):
+        result[module] = sha256(Path(__file__).parent / module)
+    if model_factory is Models:
+        root = Path(root)
+        files = {
+            "detector": root / "models/yolo26s.pt",
+            "pose": root / "models/yolo26s-pose.pt",
+            "court": root / "models/court.pt",
+            "court_architecture": root / "external/TennisCourtDetector/tracknet.py",
+        }
+        for kind in ("ball", "court"):
+            bundle = getattr(settings, f"{kind}_bundle")
+            if bundle:
+                from tennis_ai.artifacts import validate_bundle
+
+                files[kind], _ = validate_bundle(bundle, kind)
+        result.update(
+            {
+                name: sha256(path) if path.is_file() else "unavailable"
+                for name, path in files.items()
+            }
+        )
+    return result
+
+
+def load_summary(folder):
+    folder = Path(folder)
+    summary = json.loads((folder / "summary.json").read_text())
+    if (folder / "manifest.json").exists():
+        summary["source"] = str(relative_asset(folder, load_manifest(folder)["media"]["path"]))
+    return summary
+
+
 def analyze(source, output, root, settings=None, cancel=None, progress=None, model_factory=Models):
+    with jobs.run_lock(output):
+        return _analyze(source, output, root, settings, cancel, progress, model_factory)
+
+
+def resume_analysis(output, root, cancel=None, progress=None, model_factory=Models):
+    with jobs.run_lock(output):
+        summary = load_summary(output)
+        return _analyze(
+            summary["source"],
+            output,
+            root,
+            Settings(**summary["settings"]),
+            cancel,
+            progress,
+            model_factory,
+            resume=True,
+        )
+
+
+def _analyze(
+    source,
+    output,
+    root,
+    settings=None,
+    cancel=None,
+    progress=None,
+    model_factory=Models,
+    resume=False,
+):
     settings = settings or Settings()
     cancel = cancel or threading.Event()
     progress = progress or (lambda fraction, message: None)
     source, output = Path(source).resolve(), Path(output).resolve()
-    metadata = probe(source)
     if cancel.is_set():
         raise Cancelled("Cancelled before model loading")
-    output.mkdir(parents=True, exist_ok=True)
-    if (output / "cache.sqlite").exists():
-        raise ValueError(
-            "Output already contains an analysis; use a new folder or the re-render command"
-        )
-    summary = {
-        "schema_version": 1,
-        "status": "running",
-        "source": str(source),
+    if not resume and (output / "cache.sqlite").exists():
+        raise ValueError("Output already contains an analysis; use resume or a new folder")
+    metadata = probe(source)
+    versions = {n: importlib.metadata.version(n) for n in ["ultralytics", "torch", "av", "numpy"]}
+    provenance = fingerprints(root, settings, model_factory)
+    # Event candidates are derived after inference, so the detector choice does not
+    # invalidate cached predictions or block resuming an older interrupted run.
+    inference_settings = {k: v for k, v in asdict(settings).items() if k != "event_detector"}
+    identity = {
         "source_sha256": sha256(source),
-        "video": metadata,
-        "settings": asdict(settings),
-        "versions": {n: importlib.metadata.version(n) for n in ["ultralytics", "torch", "av"]},
+        "settings": inference_settings,
+        "versions": versions,
+        "models": provenance,
     }
-    summary_path = output / "summary.json"
-    summary_path.write_text(json.dumps(summary, indent=2))
-    started = time.monotonic()
     connection = connect(output)
+    jobs.initialize(connection)
+    checkpoint = None
+    if resume:
+        if jobs.read(connection, "identity") != identity:
+            connection.close()
+            raise ValueError("Resume mismatch: source, settings, models or runtime changed")
+        summary = load_summary(output)
+        phase = jobs.read(connection, "phase")
+        if phase in ("inference_complete", "complete"):
+            connection.close()
+            summary["status"] = "inference_complete"
+            atomic_json(output / "summary.json", summary)
+            return _render_cached(output, cancel=cancel, progress=progress)
+        checkpoint = jobs.read(connection, "checkpoint")
+        if checkpoint and checkpoint["model"] is None:
+            connection.close()
+            raise ValueError("This model adapter does not support checkpoint restoration")
+    else:
+        try:
+            manifest = write_manifest(
+                output, source, metadata, asdict(settings), provenance, version=3
+            )
+            if manifest["media"]["sha256"] != identity["source_sha256"]:
+                raise ValueError("Source changed during import")
+            source = relative_asset(output, manifest["media"]["path"])
+            summary = {
+                "schema_version": 1,
+                "status": "running",
+                "source": str(source),
+                "source_sha256": identity["source_sha256"],
+                "video": metadata,
+                "settings": asdict(settings),
+                "versions": versions,
+            }
+            jobs.save(connection, "identity", identity)
+            jobs.save(connection, "phase", "running")
+            connection.commit()
+        except Exception:
+            connection.close()
+            raise
+    summary_path = output / "summary.json"
+    summary["status"] = "running"
+    summary.pop("error", None)
+    atomic_json(summary_path, summary)
+    update_status(output, "running")
+    started = time.monotonic()
+    inference_finished = False
     try:
         progress(0, "Loading models")
         models = model_factory(
             root, settings.device, settings.ball_bundle, settings.court_bundle, metadata["fps"]
         )
-        ball_tracker, scene_monitor = BallTracker(), SceneMonitor()
-        scene, court, last_calibration = 0, None, -10.0
-        for index, timestamp, frame in decode(source):
+        ball_tracker = create_ball_tracker(settings.ball_tracker, settings.overlay_masks)
+        scene_monitor = SceneMonitor()
+        scene, court, last_calibration, last_frame = 0, None, -10.0, -1
+        if checkpoint:
+            import numpy as np
+
+            models.restore(checkpoint["model"])
+            if "ball_tracker" in checkpoint:
+                ball_tracker.restore(checkpoint["ball_tracker"])
+            else:
+                ball_tracker.history.extend((t, xy) for t, xy in checkpoint["ball_history"])
+            previous = checkpoint["previous_image"]
+            scene_monitor.previous = np.asarray(previous, dtype=np.uint8) if previous else None
+            scene, court = checkpoint["scene"], checkpoint["court"]
+            last_calibration, last_frame = checkpoint["last_calibration"], checkpoint["frame"]
+
+        def capture(index, timestamp, model):
+            return {
+                "frame": index,
+                "timestamp": timestamp,
+                "scene": scene,
+                "court": court,
+                "last_calibration": last_calibration,
+                "ball_history": list(ball_tracker.history),
+                "ball_tracker": ball_tracker.snapshot(),
+                "previous_image": scene_monitor.previous.tolist()
+                if scene_monitor.previous is not None
+                else None,
+                "model": model.snapshot() if hasattr(model, "snapshot") else None,
+            }
+
+        index = -1
+        after = (checkpoint["frame"], checkpoint["timestamp"]) if checkpoint else None
+        for index, timestamp, frame in decode(source, after=after):
             if cancel.is_set():
-                raise Cancelled("Analysis cancelled; partial cache retained")
+                raise Cancelled("Analysis paused; use Resume to continue")
+            if index <= last_frame:
+                continue
             cut, moving = scene_monitor.update(frame)
             if cut:
                 scene += 1
@@ -99,7 +266,6 @@ def analyze(source, output, root, settings=None, cancel=None, progress=None, mod
                 ball_tracker.reset()
                 court = None
             if cut or moving or timestamp - last_calibration >= 1.0:
-                # Invalidate stale geometry rather than carry it through a pan or failed fit.
                 court = models.court_geometry(frame)
                 last_calibration = timestamp
             players, rackets, balls, poses = models.infer(frame, court)
@@ -107,7 +273,7 @@ def analyze(source, output, root, settings=None, cancel=None, progress=None, mod
             associate_rackets(players, rackets)
             ball = ball_tracker.update(balls, timestamp, frame.shape, court)
             record = {
-                "schema_version": 1,
+                "schema_version": 2,
                 "frame": index,
                 "timestamp": timestamp,
                 "scene": scene,
@@ -119,16 +285,28 @@ def analyze(source, output, root, settings=None, cancel=None, progress=None, mod
                 "ball_candidates": balls,
                 "ball": ball,
             }
-            connection.execute(
-                "INSERT INTO frames VALUES (?, ?, ?)", (index, timestamp, json.dumps(record))
+            record["quality"] = quality_for_record(
+                record, frame.shape, last_calibration, sharpness(frame)
             )
-            if index % 30 == 0:
+            record["ball"]["visibility"] = "observed" if ball["status"] == "observed" else "unknown"
+            connection.execute(
+                "INSERT INTO frames VALUES (?, ?, ?)",
+                (index, timestamp, json.dumps(record, allow_nan=False)),
+            )
+            # Every checkpoint and its corresponding predictions commit atomically.
+            if index % 30 == 0 or cancel.is_set():
+                checkpoint = capture(index, timestamp, models)
+                jobs.save(connection, "checkpoint", checkpoint)
                 connection.commit()
                 progress(
                     min(0.75, 0.75 * timestamp / max(metadata["duration"], 0.01)),
                     f"Analyzed frame {index + 1} / {timestamp:.1f}s",
                 )
+        if index >= 0:
+            jobs.save(connection, "checkpoint", capture(index, timestamp, models))
+        jobs.save(connection, "phase", "inference_complete")
         connection.commit()
+        inference_finished = True
         summary.update(
             {
                 "status": "inference_complete",
@@ -137,17 +315,24 @@ def analyze(source, output, root, settings=None, cancel=None, progress=None, mod
                 if settings.ball_bundle
                 else "COCO sports-ball baseline",
                 "warnings": models.warnings,
-                "inference_seconds": time.monotonic() - started,
+                "inference_seconds": summary.get("inference_seconds", 0)
+                + time.monotonic()
+                - started,
             }
         )
-        summary_path.write_text(json.dumps(summary, indent=2))
+        atomic_json(summary_path, summary)
         del models
-        render_cached(output, cancel=cancel, progress=progress, check_source=False)
+        _render_cached(output, cancel=cancel, progress=progress, check_source=False)
     except Exception as error:
-        connection.commit()
-        summary["status"] = "cancelled" if isinstance(error, Cancelled) else "failed"
-        summary["error"] = str(error)
-        summary_path.write_text(json.dumps(summary, indent=2))
+        connection.rollback()
+        status = "paused" if isinstance(error, Cancelled) else "failed"
+        summary["status"], summary["error"] = status, str(error)
+        if not inference_finished:
+            summary["inference_seconds"] = (
+                summary.get("inference_seconds", 0) + time.monotonic() - started
+            )
+        atomic_json(summary_path, summary)
+        update_status(output, status)
         raise
     finally:
         connection.close()
@@ -155,11 +340,12 @@ def analyze(source, output, root, settings=None, cancel=None, progress=None, mod
 
 
 def corrected_records(records, corrections, shape, limit):
+    roles = SceneRoles(players=limit)
     active = None
     previous_scene = None
     selected_ids: set[int] = set()
     for record in records:
-        if record["scene"] != previous_scene or record.get("camera_moving"):
+        if record["scene"] != previous_scene or record.get("camera_moving") or record.get("cut"):
             active = None
         if record["scene"] != previous_scene:
             selected_ids.clear()
@@ -171,26 +357,44 @@ def corrected_records(records, corrections, shape, limit):
                 raise ValueError(f"Invalid court corners at frame {record['frame']}")
         if active is not None:
             record["court"] = active
+        elif corrections.get("court"):
+            # A manual override expires at movement/cuts until explicitly recalibrated.
+            record["court"] = None
         record["players"] = select_players(record["players"], record["court"], limit, selected_ids)
         selected_ids = {p["id"] for p in record["players"]}
         labels = corrections.get("labels", {}).get(str(record["scene"]), {})
         for player in record["players"]:
             player["label"] = labels.get(str(player["id"]), f"P{player['id']}")
+        record["quality"] = quality_for_record(
+            record, shape, sharpness_value=record.get("quality", {}).get("sharpness")
+        )
+        record["players"] = roles.update(record["players"], record)
         yield record
 
 
 def render_cached(output, overlays=None, cancel=None, progress=None, check_source=True):
+    with jobs.run_lock(output):
+        return _render_cached(output, overlays, cancel, progress, check_source)
+
+
+def _render_cached(output, overlays=None, cancel=None, progress=None, check_source=True):
     output = Path(output)
     cancel = cancel or threading.Event()
     progress = progress or (lambda fraction, message: None)
     summary_path = output / "summary.json"
-    summary = json.loads(summary_path.read_text())
+    summary = load_summary(output)
     if summary["status"] not in ("complete", "inference_complete"):
         raise ValueError("Only a completed inference cache can be rendered")
     source, metadata = summary["source"], summary["video"]
     if check_source and sha256(source) != summary["source_sha256"]:
         raise ValueError("Source video changed; cached predictions cannot be reused")
-    corrections_path = output / "corrections.json"
+    manifest = load_manifest(output) if (output / "manifest.json").exists() else None
+    artifacts = (
+        manifest["artifacts"]
+        if manifest
+        else {"frames": "frames.jsonl", "events": "events.json", "corrections": "corrections.json"}
+    )
+    corrections_path = relative_asset(output, artifacts["corrections"])
     corrections = json.loads(corrections_path.read_text()) if corrections_path.exists() else {}
     connection = connect(output)
     records = corrected_records(
@@ -204,6 +408,7 @@ def render_cached(output, overlays=None, cancel=None, progress=None, check_sourc
     review_path.unlink(missing_ok=True)
     review = sqlite3.connect(review_path)
     review.execute("CREATE TABLE frames (idx INTEGER PRIMARY KEY, time REAL, data TEXT)")
+    review.execute("CREATE INDEX frame_time ON frames(time)")
     silent = output / "silent.tmp.mp4"
     pending = output / "annotated.pending.mp4"
     json_path = output / "frames.pending.jsonl"
@@ -247,7 +452,7 @@ def render_cached(output, overlays=None, cancel=None, progress=None, check_sourc
         review.close()
         review_path.replace(output / "review.sqlite")
         pending.replace(output / "annotated.mp4")
-        json_path.replace(output / "frames.jsonl")
+        json_path.replace(relative_asset(output, artifacts["frames"]))
         summary.update(
             {
                 "status": "complete",
@@ -261,7 +466,48 @@ def render_cached(output, overlays=None, cancel=None, progress=None, check_sourc
                 "overlays": sorted(renderer.overlays),
             }
         )
-        summary_path.write_text(json.dumps(summary, indent=2))
+        from tennis_ai.events import regenerate_events
+
+        detector = summary["settings"].get("event_detector", "baseline-v1")
+        if manifest and manifest["schema_version"] == 3:
+            from tennis_ai.events import generate_candidates
+            from tennis_ai.evidence import load_evidence, persist_frame_tracks, validate_evidence
+
+            # Rendering overlays does not replace the versioned review graph.
+            bundle = load_evidence(output, manifest)
+            if (
+                manifest["status"] != "complete"
+                and not bundle["events"]["events"]
+                and not bundle["audit"]
+            ):
+                with relative_asset(output, artifacts["frames"]).open() as stream:
+                    bundle["events"]["events"] = list(
+                        generate_candidates(
+                            (json.loads(line) for line in stream if line.strip()), detector
+                        )
+                    )
+                validate_evidence(bundle, manifest["media"]["duration"])
+                atomic_json(relative_asset(output, artifacts["events"]), bundle["events"])
+            with relative_asset(output, artifacts["frames"]).open() as stream:
+                persist_frame_tracks(
+                    output, manifest, (json.loads(line) for line in stream if line.strip())
+                )
+        else:
+            regenerate_events(
+                relative_asset(output, artifacts["frames"]),
+                relative_asset(output, artifacts["events"]),
+                corrections_path,
+                detector,
+            )
+        with relative_asset(output, artifacts["frames"]).open() as stream:
+            summary["capture_quality"] = summarize_quality(
+                json.loads(line) for line in stream if line.strip()
+            )
+        atomic_json(summary_path, summary)
+        update_status(output, "complete")
+        jobs.initialize(connection)
+        jobs.save(connection, "phase", "complete")
+        connection.commit()
         progress(1, "Complete")
     finally:
         connection.close()

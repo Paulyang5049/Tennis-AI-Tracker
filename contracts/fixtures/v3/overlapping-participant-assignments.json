@@ -1,0 +1,4 @@
+[
+  {"id":"side-1","scene":0,"start":0,"end":5,"track_id":1,"side":"near","participant_id":"self","reviewed":true,"confidence":null},
+  {"id":"side-2","scene":0,"start":1,"end":4,"track_id":2,"side":"far","participant_id":"self","reviewed":true,"confidence":null}
+]

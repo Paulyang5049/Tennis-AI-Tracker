@@ -1,0 +1,28 @@
+{
+  "reviewer": "adversarial",
+  "findings": [
+    {
+      "title": "Court correction roundtrip changes its frame scope",
+      "severity": "P1",
+      "file": "ios/TennisApp/TennisApp.swift",
+      "line": 154,
+      "confidence": 100,
+      "autofix_class": "manual",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "pre_existing": false,
+      "suggested_fix": "Store iOS court corrections by frame index and resolve applicable corrections within the same scene for inference, cached review and export. Add a nonzero-frame, multi-scene cross-platform roundtrip test.",
+      "first_evidence": "ios/TennisApp/TennisApp.swift:154: func saveCourt() { perform { _=try Court(points:corners); guard let store else { throw PackageError.invalid(\"请先开始分析以建立记录\") }; var c=try store.corrections(); c.court[String(frame?.scene ?? 0)]=corners; try store.saveCorrections(c); calibrating=false } }"
+    }
+  ],
+  "residual_risks": [
+    "Covered all five supplied risk divisions through representative paths.",
+    "Native smoke bypasses SwiftUI lifecycle and file-picker behavior; VALIDATION.md accurately discloses this.",
+    "Termination after the complete SQLite checkpoint but before artifact export leaves stale JSON until explicit export.",
+    "Swift Corrections drops desktop corrections.events metadata during import/re-export; immediate events.json state survives, but regeneration portability needs verification."
+  ],
+  "testing_gaps": [
+    "Read-only source review; no native runtime tests executed.",
+    "Simulator fixture does not exercise pause/resume, scene changes or nonzero-frame court corrections."
+  ]
+}

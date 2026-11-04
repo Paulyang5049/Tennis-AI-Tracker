@@ -14,7 +14,7 @@ requires-python = ">=3.11,<3.14"
 dependencies = [
   "ultralytics==8.4.140", "gradio==6.26.0", "av==18.1.0",
   "gdown==5.2.0", "numpy==2.4.6", "opencv-python==5.0.0.93", "torch==2.14.0",
-  "torchvision==0.29.0", "lap==0.5.12"
+  "torchvision==0.29.0", "lap==0.5.12", "jsonschema==4.26.0"
 ]
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.11", "mypy>=1.15", "build>=1"]
@@ -27,6 +27,8 @@ Repository = "https://github.com/Paulyang5049/Tennis-AI-Tracker"
 Issues = "https://github.com/Paulyang5049/Tennis-AI-Tracker/issues"
 [tool.setuptools.packages.find]
 where = ["src"]
+[tool.setuptools.package-data]
+tennis_ai = ["contract_schemas.json"]
 [tool.ruff]
 line-length = 100
 [tool.ruff.lint]

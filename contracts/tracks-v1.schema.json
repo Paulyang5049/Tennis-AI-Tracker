@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "timestamp",
+    "scene",
+    "track_id",
+    "side",
+    "position_court_m",
+    "method",
+    "reviewed",
+    "calibration_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "timestamp": {
+      "type": "number",
+      "minimum": 0
+    },
+    "scene": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "track_id": {
+      "type": "integer"
+    },
+    "side": {
+      "enum": [
+        "near",
+        "far",
+        "unknown"
+      ]
+    },
+    "position_court_m": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "method": {
+      "enum": [
+        "ankles_homography",
+        "box_bottom_homography",
+        null
+      ]
+    },
+    "reviewed": {
+      "type": "boolean"
+    },
+    "calibration_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "image_point_px": {"type": ["array", "null"], "minItems": 2, "maxItems": 2, "items": {"type": "number"}},
+    "error_m": {"type": ["number", "null"], "minimum": 0},
+    "role_state": {"enum": ["candidate", "ambiguous", "unknown"]}
+  },
+  "additionalProperties": false
+}

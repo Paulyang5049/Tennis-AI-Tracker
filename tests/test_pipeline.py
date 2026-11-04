@@ -2,6 +2,7 @@ import json
 import sqlite3
 import subprocess
 import threading
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -111,7 +112,7 @@ def test_invalid_input_and_existing_output(tmp_path, video):
     analyze(video, output, tmp_path, model_factory=FakeModels)
     with pytest.raises(ValueError, match="already contains"):
         analyze(video, output, tmp_path, model_factory=FakeModels)
-    video.write_bytes(b"changed")
+    Path(json.loads((output / "summary.json").read_text())["source"]).write_bytes(b"changed")
     with pytest.raises(ValueError, match="changed"):
         render_cached(output)
 

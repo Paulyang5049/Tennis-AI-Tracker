@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "insights"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "insights": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "observation",
+          "interpretation",
+          "action",
+          "metric_ids",
+          "event_ids",
+          "confidence",
+          "rule_version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "observation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "interpretation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1
+          },
+          "metric_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true,
+            "minItems": 1
+          },
+          "event_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true,
+            "minItems": 1
+          },
+          "confidence": {
+            "enum": [
+              "limited",
+              "moderate"
+            ]
+          },
+          "rule_version": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

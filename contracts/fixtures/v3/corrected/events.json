@@ -1,0 +1,85 @@
+{
+  "schema_version": 3,
+  "events": [
+    {
+      "id": "shot-1",
+      "kind": "hit",
+      "start": 1,
+      "end": 1,
+      "scene": 0,
+      "player_id": 1,
+      "stroke": "forehand",
+      "position": null,
+      "provenance": "manual",
+      "reviewed": true,
+      "confidence": null,
+      "excluded": false,
+      "favorite": false,
+      "participant_id": "self",
+      "contact_interval": null,
+      "contact_point_image_px": [
+        120,
+        200
+      ],
+      "hitter_position_court_m": [
+        4,
+        2
+      ],
+      "field_confidence": {},
+      "position_source": null
+    },
+    {
+      "id": "bounce-1",
+      "kind": "bounce",
+      "start": 2,
+      "end": 2,
+      "scene": 0,
+      "player_id": null,
+      "stroke": "unknown",
+      "position": [
+        5,
+        17
+      ],
+      "provenance": "automatic",
+      "reviewed": true,
+      "confidence": null,
+      "excluded": false,
+      "favorite": false,
+      "participant_id": null,
+      "contact_interval": null,
+      "contact_point_image_px": null,
+      "hitter_position_court_m": null,
+      "field_confidence": {},
+      "position_source": "reviewed_bounce"
+    }
+  ],
+  "participants": [
+    {
+      "id": "self",
+      "name": "Player",
+      "role": "self"
+    }
+  ],
+  "assignments": [
+    {
+      "id": "side-1",
+      "scene": 0,
+      "start": 0,
+      "end": 5,
+      "track_id": 1,
+      "side": "near",
+      "participant_id": "self",
+      "reviewed": true,
+      "confidence": null
+    }
+  ],
+  "links": [
+    {
+      "id": "link-1",
+      "shot_id": "shot-1",
+      "bounce_id": "bounce-1",
+      "reviewed": true,
+      "confidence": null
+    }
+  ]
+}

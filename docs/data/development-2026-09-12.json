@@ -1,0 +1,14 @@
+{
+  "date": "2026-09-12",
+  "scope": "U1 evidence foundation and U7 development-artifact configuration",
+  "python_tests": {"passed": 103, "total": 103},
+  "swift_tests": {"passed": 15, "total": 15},
+  "swift_to_python_fixture_exports": 4,
+  "wheel_resource_smoke": "passed",
+  "unsigned_simulator_build": "passed",
+  "phone_accuracy": "not_measured",
+  "physical_device": "not_measured",
+  "coach_utility": "not_measured",
+  "signed_distribution": "blocked_missing_evidence_and_configuration",
+  "note": "Local software verification only. CI artifact availability is checked after push."
+}

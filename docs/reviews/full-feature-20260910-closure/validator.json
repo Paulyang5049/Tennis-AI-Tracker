@@ -1,0 +1,64 @@
+{
+  "verdicts": [
+    {
+      "#": 1,
+      "validated": true,
+      "reason": "Contract.swift 的 Player 仍只编码 id、box、confidence、label，Detection 仍只编码 box、confidence，而 Python 帧生产路径写入 player.pose 和 racket.player_id，因此 iOS 解码再导出会丢失这两个契约字段。"
+    },
+    {
+      "#": 2,
+      "validated": false,
+      "reason": "Library.swift:83-89 现已拒绝非 complete 包，并在创建目标目录前验证 v2 包的视频、frames、events、corrections 均为常规文件，成功路径才在第 113 行将存储设为 complete。"
+    },
+    {
+      "#": 3,
+      "validated": false,
+      "reason": "TennisApp.swift:154 现以当前 FrameRecord.frame 作为 correction key，Contract.swift:132-136 也按绝对帧号选择不晚于目标帧的最新校准，已不再把 scene 当作帧作用域。"
+    },
+    {
+      "#": 4,
+      "validated": false,
+      "reason": "TennisApp.swift:24 已用 Double 的 String interpolation specifier 直接格式化 duration，不再执行可能因超大有限值而陷阱的 Int 转换，且导入策略另在 Library.swift 将时长限制为 7200 秒。"
+    },
+    {
+      "#": 5,
+      "validated": false,
+      "reason": "app.py:316-319 现调用 export_event_clip，而 library.py:53-60 会把 start == end 的点事件扩为视频边界内前后各两秒的非空区间后再调用 export_clip。"
+    },
+    {
+      "#": 6,
+      "validated": false,
+      "reason": "虽然 AnalysisEngine.swift:66 先 commit(.complete) 再 export，但任何 export 异常都会进入第 67-69 行并再次 commit(.failed)，所以后续运行不会命中第 17 行的 complete 早退。"
+    },
+    {
+      "#": 7,
+      "validated": false,
+      "reason": "Library.swift:14-19 已将同步包复制、哈希和 JSONL 导入封装在独立 actor 的 importFile 中，TennisApp.swift:35 通过 await 调用它，仅在完成后更新 SwiftUI 状态。"
+    },
+    {
+      "#": 8,
+      "validated": false,
+      "reason": "Contract.swift:121 现明确要求非空 position 的 kind 必须为 bounce，Library.swift:109 导入事件时调用 saveEvent 并再次执行该验证。"
+    },
+    {
+      "#": 9,
+      "validated": true,
+      "reason": "AnalysisEngine.swift:24 始终把 AVAssetReader.timeRange 从 media.origin 开始，恢复时仅在第 46 行按 lastTimestamp 丢弃旧样本，因此恢复点之前的所有压缩视频帧仍会被重新解码，ios/README.md 也明确记录长片恢复尚无 GOP 定位加速。"
+    },
+    {
+      "#": 10,
+      "validated": true,
+      "reason": "AnalysisEngine.swift:57 位于逐样本循环内并每帧调用 store.corrections()，AnalysisStore.corrections() 每次读取 SQLite metadata 后用 ContractJSON.decoder 解码完整 Corrections。"
+    },
+    {
+      "#": 11,
+      "validated": false,
+      "reason": "Manifest.validate 已移除 7200 秒上限，analysis-v2.schema.json 也只要求 duration 大于零，而 Library.swift:29、55、82 将两小时限制保留为 iOS 列表和导入策略，契约与平台政策现已分离。"
+    },
+    {
+      "#": 12,
+      "validated": false,
+      "reason": "EventEditor.swift:8 的 save 回调现为 throws，第 40-41 行仅在 try save 成功后 dismiss 并在失败时保留本地 error，TennisApp.swift:126 的调用方也直接抛出 saveEvent 或 refresh 错误。"
+    }
+  ]
+}

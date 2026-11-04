@@ -1,0 +1,10 @@
+# Independent CPython 3.11 / macOS arm64 conversion environment.
+# Never install these constraints into the desktop .venv.
+ultralytics==8.4.140
+coremltools==9.0
+numpy==2.3.5
+torch==2.7.0
+torchvision==0.22.0
+opencv-python==4.11.0.86
+scikit-learn==1.7.2
+Pillow==11.3.0
