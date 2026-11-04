@@ -26,3 +26,6 @@ ios/DerivedData/
 xcuserdata/
 mobile-toolchain/.venv*/
 mobile-toolchain/exports/
+
+# Release wheels are attached to GitHub releases, not committed
+colab_delivery/*.whl
