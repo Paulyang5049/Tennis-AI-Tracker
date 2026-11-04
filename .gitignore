@@ -34,3 +34,8 @@ docs/reviews/**/validator-input.json
 
 # Release wheels are attached to GitHub releases, not committed
 colab_delivery/*.whl
+
+# Local footage and working folders at the repository root stay private
+/points/
+/*.mp4
+/*.mov
