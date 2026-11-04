@@ -31,3 +31,6 @@ mobile-toolchain/exports/
 docs/reviews/**/full.diff
 docs/reviews/**/raw-returns.json
 docs/reviews/**/validator-input.json
+
+# Release wheels are attached to GitHub releases, not committed
+colab_delivery/*.whl
