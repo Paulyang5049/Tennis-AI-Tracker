@@ -10,6 +10,7 @@ from pathlib import Path
 
 from tennis_ai import jobs
 from tennis_ai.artifacts import sha256
+from tennis_ai.events import create_event_detector
 from tennis_ai.geometry import associate_rackets, attach_poses, calibrate, ground_point, project
 from tennis_ai.models import Models
 from tennis_ai.package import (
@@ -34,6 +35,7 @@ class Settings:
     court_bundle: str | None = None
     ball_tracker: str = "baseline-v1"
     overlay_masks: list[list[float]] = field(default_factory=list)
+    event_detector: str = "baseline-v1"
 
     def __post_init__(self):
         if self.players not in (2, 4):
@@ -41,6 +43,7 @@ class Settings:
         if self.device not in ("auto", "cpu", "mps", "cuda"):
             raise ValueError("Unknown inference device")
         create_ball_tracker(self.ball_tracker, self.overlay_masks)
+        create_event_detector(self.event_detector)
 
 
 def connect(folder):
@@ -156,9 +159,12 @@ def _analyze(
     metadata = probe(source)
     versions = {n: importlib.metadata.version(n) for n in ["ultralytics", "torch", "av", "numpy"]}
     provenance = fingerprints(root, settings, model_factory)
+    # Event candidates are derived after inference, so the detector choice does not
+    # invalidate cached predictions or block resuming an older interrupted run.
+    inference_settings = {k: v for k, v in asdict(settings).items() if k != "event_detector"}
     identity = {
         "source_sha256": sha256(source),
-        "settings": asdict(settings),
+        "settings": inference_settings,
         "versions": versions,
         "models": provenance,
     }
@@ -462,6 +468,7 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
         )
         from tennis_ai.events import regenerate_events
 
+        detector = summary["settings"].get("event_detector", "baseline-v1")
         if manifest and manifest["schema_version"] == 3:
             from tennis_ai.events import generate_candidates
             from tennis_ai.evidence import load_evidence, persist_frame_tracks, validate_evidence
@@ -475,7 +482,9 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
             ):
                 with relative_asset(output, artifacts["frames"]).open() as stream:
                     bundle["events"]["events"] = list(
-                        generate_candidates(json.loads(line) for line in stream if line.strip())
+                        generate_candidates(
+                            (json.loads(line) for line in stream if line.strip()), detector
+                        )
                     )
                 validate_evidence(bundle, manifest["media"]["duration"])
                 atomic_json(relative_asset(output, artifacts["events"]), bundle["events"])
@@ -488,6 +497,7 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
                 relative_asset(output, artifacts["frames"]),
                 relative_asset(output, artifacts["events"]),
                 corrections_path,
+                detector,
             )
         with relative_asset(output, artifacts["frames"]).open() as stream:
             summary["capture_quality"] = summarize_quality(

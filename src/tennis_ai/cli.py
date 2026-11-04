@@ -31,6 +31,12 @@ def main():
     analysis.add_argument(
         "--overlay-masks", help="JSON list of normalized overlay boxes; experimental tracker only"
     )
+    analysis.add_argument(
+        "--event-detector",
+        choices=["baseline-v1", "contact-v2"],
+        default="baseline-v1",
+        help="contact-v2 is an unvalidated gap-tolerant hit candidate experiment",
+    )
     resume = commands.add_parser("resume", help="Continue an interrupted analysis")
     resume.add_argument("output")
     render = commands.add_parser("render")
@@ -107,6 +113,7 @@ def main():
                     args.court_bundle,
                     args.ball_tracker,
                     json.loads(Path(args.overlay_masks).read_text()) if args.overlay_masks else [],
+                    args.event_detector,
                 ),
                 cancel,
                 lambda f, m: print(f"{f:.0%}: {m}", flush=True),

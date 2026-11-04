@@ -103,7 +103,7 @@ def test_analysis_export_and_rerender_preserve_review(tmp_path, monkeypatch):
     writer.close()
     monkeypatch.setattr(
         "tennis_ai.events.generate_candidates",
-        lambda frames: iter([new_event("hit", 0, id="candidate")]),
+        lambda frames, detector="baseline-v1": iter([new_event("hit", 0, id="candidate")]),
     )
     folder = tmp_path / "run"
     analyze(source, folder, tmp_path, model_factory=Models)
@@ -115,7 +115,9 @@ def test_analysis_export_and_rerender_preserve_review(tmp_path, monkeypatch):
     before = load_evidence(folder)
     monkeypatch.setattr(
         "tennis_ai.events.generate_candidates",
-        lambda frames: pytest.fail("Completed rerender must not regenerate reviewed events"),
+        lambda frames, detector="baseline-v1": pytest.fail(
+            "Completed rerender must not regenerate reviewed events"
+        ),
     )
     render_cached(folder)
     assert load_evidence(folder) == before

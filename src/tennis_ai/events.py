@@ -251,11 +251,238 @@ class CandidateDetector:
         return detector
 
 
-def generate_candidates(frames):
-    detector = CandidateDetector()
+WRISTS = (9, 10)
+
+
+def _reach(point, player):
+    """Normalized distance to a player's wrists, or None outside the hitting region."""
+    x1, y1, x2, y2 = player["box"]
+    height = max(1.0, y2 - y1)
+    x, y = point
+    if not (x1 - 0.6 * height <= x <= x2 + 0.6 * height and y1 - 0.5 * height <= y <= y2):
+        return None
+    joints = [
+        joint[:2]
+        for joint in (player.get("pose") or [])[WRISTS[0] : WRISTS[1] + 1]
+        if len(joint) == 3 and joint[2] >= 0.3
+    ]
+    anchors = joints or [[(x1 + x2) / 2, y1 + 0.4 * height]]
+    return min(math.hypot(x - ax, y - ay) for ax, ay in anchors) / height
+
+
+class ContactCandidateDetector:
+    """Opt-in, gap-tolerant hit candidates; not validated against labelled contacts.
+
+    The ball is often unobserved for a few frames at contact, and a far-court
+    contact rarely produces a sharp image turn. A visit is a run of observed
+    samples inside one player's hitting region; missing frames up to
+    ``max_gap`` do not end it. The visit becomes a hit candidate only when a
+    later observed sample crosses the line between the near and far players
+    in the outgoing direction, so a toss or a ball passing a player does not
+    count. Interpolated samples are never used. Bounces still come from the
+    baseline turn heuristic.
+    """
+
+    version = "contact-v2"
+
+    def __init__(self, max_gap=0.4, departure=1.2, cooldown=0.35, rally_gap=2.0):
+        self.max_gap = max_gap
+        self.departure = departure
+        self.cooldown = cooldown
+        self.rally_gap = rally_gap
+        self.bounces = CandidateDetector(rally_gap=rally_gap)
+        self.visit = None
+        self.pending: list[dict[str, Any]] = []
+        self.hit_times: deque[float] = deque(maxlen=4)
+        self.rally = None
+        self.scene = None
+        self.last_timestamp = None
+        self.last_observed = None
+
+    def _reset(self):
+        self.visit = None
+        self.pending = []
+        self.last_observed = None
+
+    def _close_rally(self):
+        result = []
+        if self.rally and self.rally["hits"] >= 2:
+            r = self.rally
+            start = max(0, r["start"] - 0.5)
+            result.append(new_event("rally", start, r["scene"], r["frame"], end=r["end"]))
+        self.rally = None
+        return result
+
+    def _close_visit(self):
+        if self.visit and len(self.visit["samples"]) >= 2:
+            # A later visit by the same player supersedes an unconfirmed one, such as the
+            # ball bounced or tossed before a serve.
+            self.pending = [v for v in self.pending if v["player"] != self.visit["player"]]
+            self.pending.append(self.visit)
+        self.visit = None
+
+    def _owner(self, point, players):
+        """Nearest player whose hitting region holds the ball, with the side split line."""
+        bottoms = sorted(player["box"][3] for player in players)
+        best = None
+        for player in players:
+            distance = _reach(point, player)
+            if distance is not None and (best is None or distance < best[0]):
+                best = (distance, player)
+        if best is None or len(bottoms) < 2 or bottoms[-1] - bottoms[0] < 1:
+            return None
+        player = best[1]
+        far, near = bottoms[0], bottoms[-1]
+        side = "far" if player["box"][3] < (far + near) / 2 else "near"
+        # In a fixed full-court view the net lies about a fifth of the feet span below the
+        # far player. A near-side serve toss can rise past 35% of the span, so a near
+        # contact must carry the ball beyond the net; a far contact only needs to descend
+        # well past it.
+        return {
+            "player": player["id"],
+            "side": side,
+            "line": far + (0.2 if side == "near" else 0.35) * (near - far),
+            "distance": best[0],
+        }
+
+    def _confirm(self, sample, scene):
+        result = []
+        remaining = []
+        for visit in self.pending:
+            y = sample["xy"][1]
+            crossed = y <= visit["line"] if visit["side"] == "near" else y >= visit["line"]
+            if crossed:
+                result.extend(self._hit(visit, sample, scene))
+            elif sample["timestamp"] - visit["samples"][-1]["timestamp"] <= self.departure:
+                remaining.append(visit)
+        self.pending = remaining
+        return result
+
+    def _hit(self, visit, departure, scene):
+        samples = visit["samples"]
+        recent = [s for s in samples if samples[-1]["timestamp"] - s["timestamp"] <= 0.6]
+        closest = min(recent, key=lambda s: s["distance"])
+        index = samples.index(closest)
+        following = samples[index + 1] if index + 1 < len(samples) else departure
+        timestamp = closest["timestamp"]
+        if following["timestamp"] - timestamp > 0.07:
+            # Contact fell inside unobserved frames; both bounds are observations.
+            timestamp = (timestamp + following["timestamp"]) / 2
+        if any(abs(timestamp - t) < self.cooldown for t in self.hit_times):
+            return []
+        self.hit_times.append(timestamp)
+        if self.rally is None:
+            self.rally = {
+                "start": timestamp,
+                "end": departure["timestamp"],
+                "scene": scene,
+                "frame": closest["frame"],
+                "hits": 0,
+            }
+        self.rally["hits"] += 1
+        return [
+            new_event(
+                "hit",
+                timestamp,
+                scene,
+                closest["frame"],
+                player_id=visit["player"],
+            )
+        ]
+
+    def feed(self, frame):
+        timestamp = float(frame["timestamp"])
+        if not math.isfinite(timestamp) or timestamp < 0:
+            raise ValueError("Frame timestamps must be finite and nonnegative")
+        if self.last_timestamp is not None and timestamp < self.last_timestamp:
+            raise ValueError("Candidate generation requires ordered presentation timestamps")
+        self.last_timestamp = timestamp
+        result = [e for e in self.bounces.feed(frame) if e["kind"] == "bounce"]
+        scene = int(frame.get("scene", 0))
+        if self.scene != scene or frame.get("cut") or frame.get("camera_moving"):
+            result.extend(self._close_rally())
+            self._reset()
+        self.scene = scene
+        if self.rally and timestamp - self.rally["end"] > self.rally_gap:
+            result.extend(self._close_rally())
+        ball = frame.get("ball", {})
+        point = ball.get("xy")
+        if ball.get("status") != "observed" or point is None or frame.get("camera_moving"):
+            return result
+        if len(point) != 2 or not all(math.isfinite(float(v)) for v in point):
+            raise ValueError("Observed ball must have finite pixel coordinates")
+        if self.last_observed is not None and timestamp - self.last_observed > self.max_gap:
+            self._close_visit()
+        self.last_observed = timestamp
+        if self.rally:
+            self.rally["end"] = timestamp
+        owner = self._owner(point, frame.get("players", [])[:4])
+        sample = {"timestamp": timestamp, "frame": int(frame["frame"]), "xy": list(point)}
+        if owner is None or (self.visit and self.visit["player"] != owner["player"]):
+            self._close_visit()
+        result.extend(self._confirm(sample, scene))
+        if owner is not None:
+            if self.visit is None:
+                self.visit = {k: owner[k] for k in ("player", "side", "line")} | {"samples": []}
+            # Bound a long visit, such as a ball held before a serve.
+            self.visit["samples"] = self.visit["samples"][-39:] + [
+                {**sample, "distance": owner["distance"]}
+            ]
+        return result
+
+    def finish(self):
+        result = [e for e in self.bounces.finish() if e["kind"] == "bounce"]
+        return result + self._close_rally()
+
+    def state_dict(self):
+        return deepcopy(
+            {
+                "version": 2,
+                "max_gap": self.max_gap,
+                "departure": self.departure,
+                "cooldown": self.cooldown,
+                "rally_gap": self.rally_gap,
+                "bounces": self.bounces.state_dict(),
+                "visit": self.visit,
+                "pending": self.pending,
+                "hit_times": list(self.hit_times),
+                "rally": self.rally,
+                "scene": self.scene,
+                "last_timestamp": self.last_timestamp,
+                "last_observed": self.last_observed,
+            }
+        )
+
+    @classmethod
+    def from_state(cls, state):
+        if state.get("version") != 2:
+            raise ValueError("Unsupported temporal candidate state")
+        detector = cls(state["max_gap"], state["departure"], state["cooldown"], state["rally_gap"])
+        detector.bounces = CandidateDetector.from_state(state["bounces"])
+        detector.visit = deepcopy(state["visit"])
+        detector.pending = deepcopy(state["pending"])
+        detector.hit_times.extend(state["hit_times"])
+        detector.rally = deepcopy(state["rally"])
+        detector.scene = state["scene"]
+        detector.last_timestamp = state["last_timestamp"]
+        detector.last_observed = state["last_observed"]
+        return detector
+
+
+EVENT_DETECTORS = {"baseline-v1": CandidateDetector, "contact-v2": ContactCandidateDetector}
+
+
+def create_event_detector(version="baseline-v1"):
+    if version not in EVENT_DETECTORS:
+        raise ValueError("Unsupported event detector version")
+    return EVENT_DETECTORS[version]()
+
+
+def generate_candidates(frames, detector="baseline-v1"):
+    candidates = create_event_detector(detector)
     for frame in frames:
-        yield from detector.feed(frame)
-    yield from detector.finish()
+        yield from candidates.feed(frame)
+    yield from candidates.finish()
 
 
 def _event_list(events):
@@ -282,9 +509,11 @@ def apply_corrections(events, corrections):
     }
 
 
-def regenerate_events(frames_path, events_path, corrections_path=None):
+def regenerate_events(frames_path, events_path, corrections_path=None, detector="baseline-v1"):
     with Path(frames_path).open() as stream:
-        candidates = generate_candidates(json.loads(line) for line in stream if line.strip())
+        candidates = generate_candidates(
+            (json.loads(line) for line in stream if line.strip()), detector
+        )
         corrections = (
             json.loads(Path(corrections_path).read_text())
             if corrections_path and Path(corrections_path).exists()
