@@ -1,6 +1,8 @@
-"""YOLO26 and a locally downloaded specialist court model."""
+"""YOLO26 and locally downloaded specialist court and ball models."""
 
+import base64
 import importlib.util
+from collections import deque
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -28,8 +30,108 @@ def choose_device(requested="auto"):
     )
 
 
+BALL_MODELS = ("yolo-coco", "tracknet-v2")
+
+
+def load_upstream(path, name):
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ValueError(f"Cannot load {name} architecture")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def tracknet_point(classes, width, height):
+    """Ball centre from a 360 x 640 TrackNet class map, scaled to frame pixels, or None.
+
+    Mirrors the upstream postprocess exactly, including its uint8 wrap of
+    class * 255, because the published weights were evaluated with it.
+    """
+    heat = (np.asarray(classes, dtype=np.int64).reshape(360, 640) * 255).astype(np.uint8)
+    _, binary = cv2.threshold(heat, 127, 255, cv2.THRESH_BINARY)
+    circles = cv2.HoughCircles(
+        binary, cv2.HOUGH_GRADIENT, dp=1, minDist=1, param1=50, param2=2, minRadius=2, maxRadius=7
+    )
+    if circles is None:
+        return None
+    x, y = circles[0][0][:2]
+    return [float(x) * width / 640, float(y) * height / 360]
+
+
+class TrackNetBall:
+    """Opt-in three-frame heatmap ball detector (yastrebksv/TrackNet), unvalidated here.
+
+    The weights and architecture are downloaded by `setup --with-tracknet` and are
+    never redistributed. The two previous frames are part of the resume checkpoint,
+    stored losslessly, so a resumed run predicts exactly like an uninterrupted one.
+    """
+
+    def __init__(self, root, device, net=None):
+        if net is None:
+            root = Path(root)
+            weights = root / "models" / "tracknet_ball.pt"
+            architecture = root / "external" / "TrackNet" / "model.py"
+            if not (weights.is_file() and architecture.is_file()):
+                raise FileNotFoundError("TrackNet is missing. Run: tennis-ai setup --with-tracknet")
+            net = load_upstream(architecture, "tracknet_ball_upstream").BallTrackerNet()
+            net.load_state_dict(torch.load(weights, map_location="cpu", weights_only=True))
+            net.eval()
+        self.net = net
+        self.device = device
+        self.net.to(device)
+        self.frames: deque = deque(maxlen=3)
+
+    def reset(self):
+        self.frames.clear()
+
+    def snapshot(self):
+        return [
+            base64.b64encode(cv2.imencode(".png", f)[1].tobytes()).decode() for f in self.frames
+        ]
+
+    def restore(self, state):
+        self.reset()
+        for item in state:
+            data = np.frombuffer(base64.b64decode(item), dtype=np.uint8)
+            self.frames.append(cv2.imdecode(data, cv2.IMREAD_COLOR))
+
+    def detect(self, frame):
+        # Preserve upstream BGR order and (current, previous, earlier) channel stacking.
+        self.frames.append(cv2.resize(frame, (640, 360)))
+        if len(self.frames) < 3:
+            return []
+        stacked = np.concatenate([self.frames[2], self.frames[1], self.frames[0]], axis=2)
+        inp = torch.from_numpy(stacked.astype(np.float32).transpose(2, 0, 1) / 255).unsqueeze(0)
+        with torch.inference_mode():
+            try:
+                classes = self.net(inp.to(self.device)).argmax(dim=1).cpu().numpy()
+            except RuntimeError:
+                if self.device != "mps":
+                    raise
+                self.device = "cpu"
+                self.net.to("cpu")
+                classes = self.net(inp).argmax(dim=1).numpy()
+        h, w = frame.shape[:2]
+        point = tracknet_point(classes, w, h)
+        if point is None:
+            return []
+        r = 6 * w / 1280  # roughly the ball radius TrackNet was trained on at 1280 x 720
+        x, y = point
+        # The class map has no calibrated score; a constant keeps tracker ranking by motion.
+        return [{"box": [x - r, y - r, x + r, y + r], "confidence": 0.5}]
+
+
 class Models:
-    def __init__(self, root, device="auto", ball_bundle=None, court_bundle=None, fps=30):
+    def __init__(
+        self,
+        root,
+        device="auto",
+        ball_bundle=None,
+        court_bundle=None,
+        fps=30,
+        ball_model="yolo-coco",
+    ):
         from ultralytics import YOLO
         from ultralytics.trackers.byte_tracker import BYTETracker
 
@@ -59,17 +161,16 @@ class Models:
                 fuse_score=True,
             ),
         )
+        self.tracknet = (
+            TrackNetBall(self.root, self.device) if ball_model == "tracknet-v2" else None
+        )
         self.court = None
         weights = model_dir / "court.pt"
         if court_bundle:
             weights, _ = validate_bundle(court_bundle, "court")
         architecture = self.root / "external" / "TennisCourtDetector" / "tracknet.py"
         if weights.exists() and architecture.exists():
-            spec = importlib.util.spec_from_file_location("tennis_court_upstream", architecture)
-            if spec is None or spec.loader is None:
-                raise ValueError("Cannot load court architecture")
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            module = load_upstream(architecture, "tennis_court_upstream")
             self.court = module.BallTrackerNet(out_channels=15)
             self.court.load_state_dict(torch.load(weights, map_location="cpu", weights_only=True))
             self.court.to(self.device).eval()
@@ -80,6 +181,8 @@ class Models:
 
     def reset(self):
         self.tracker.reset()
+        if self.tracknet is not None:
+            self.tracknet.reset()
 
     def snapshot(self):
         from tennis_ai.jobs import snapshot_tracker
@@ -88,6 +191,7 @@ class Models:
             "tracker": snapshot_tracker(self.tracker),
             "device": self.device,
             "warnings": self.warnings,
+            "tracknet": self.tracknet.snapshot() if self.tracknet is not None else None,
         }
 
     def restore(self, state):
@@ -98,6 +202,8 @@ class Models:
         self.warnings = state["warnings"]
         if self.court is not None:
             self.court.to(self.device)
+        if self.tracknet is not None:
+            self.tracknet.restore(state.get("tracknet") or [])
 
     def predict(self, model, frame, **kwargs):
         try:
@@ -130,6 +236,8 @@ class Models:
                 self.predict(self.ball, frame, conf=0.1, imgsz=1280).boxes.cpu().numpy().data
             )
         balls = [{"box": row[:4].tolist(), "confidence": float(row[4])} for row in ball_boxes]
+        if self.tracknet is not None:
+            balls = self.tracknet.detect(frame)
         pose_result = self.predict(self.pose, frame, conf=0.25, imgsz=640)
         poses = []
         if pose_result.keypoints is not None:

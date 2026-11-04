@@ -18,6 +18,11 @@ def main():
     app.add_argument("--port", type=int, default=7860)
     setup_parser = commands.add_parser("setup")
     setup_parser.add_argument("--without-court", action="store_true")
+    setup_parser.add_argument(
+        "--with-tracknet",
+        action="store_true",
+        help="Also download the unlicensed TrackNet ball weights for local, opt-in use",
+    )
     analysis = commands.add_parser("analyze")
     analysis.add_argument("video")
     analysis.add_argument("--output", required=True)
@@ -30,6 +35,12 @@ def main():
     )
     analysis.add_argument(
         "--overlay-masks", help="JSON list of normalized overlay boxes; experimental tracker only"
+    )
+    analysis.add_argument(
+        "--ball-model",
+        choices=["yolo-coco", "tracknet-v2"],
+        default="yolo-coco",
+        help="tracknet-v2 is an unvalidated three-frame heatmap detector; needs setup --with-tracknet",
     )
     analysis.add_argument(
         "--event-detector",
@@ -105,7 +116,9 @@ def main():
         elif args.command == "setup":
             from tennis_ai.setup import setup
 
-            print(json.dumps(setup(args.root, not args.without_court), indent=2))
+            print(
+                json.dumps(setup(args.root, not args.without_court, args.with_tracknet), indent=2)
+            )
         elif args.command == "analyze":
             analyze(
                 args.video,
@@ -121,6 +134,7 @@ def main():
                     args.event_detector,
                     # Later fields by name, so independently added options cannot shift.
                     spin_detector=args.spin_detector,
+                    ball_model=args.ball_model,
                 ),
                 cancel,
                 lambda f, m: print(f"{f:.0%}: {m}", flush=True),

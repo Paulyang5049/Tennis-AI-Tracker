@@ -12,7 +12,7 @@ from tennis_ai import jobs
 from tennis_ai.artifacts import sha256
 from tennis_ai.events import SPIN_DETECTORS, create_event_detector
 from tennis_ai.geometry import associate_rackets, attach_poses, calibrate, ground_point, project
-from tennis_ai.models import Models
+from tennis_ai.models import BALL_MODELS, Models
 from tennis_ai.package import (
     atomic_json,
     load_manifest,
@@ -37,6 +37,7 @@ class Settings:
     overlay_masks: list[list[float]] = field(default_factory=list)
     event_detector: str = "baseline-v1"
     spin_detector: str | None = None
+    ball_model: str = "yolo-coco"
 
     def __post_init__(self):
         if self.players not in (2, 4):
@@ -47,6 +48,10 @@ class Settings:
         create_event_detector(self.event_detector)
         if self.spin_detector not in (None, *SPIN_DETECTORS):
             raise ValueError("Unsupported spin detector version")
+        if self.ball_model not in BALL_MODELS:
+            raise ValueError("Unsupported ball model")
+        if self.ball_model != "yolo-coco" and self.ball_bundle:
+            raise ValueError("Choose either a ball bundle or an alternative ball model")
 
 
 def connect(folder):
@@ -98,6 +103,9 @@ def fingerprints(root, settings, model_factory):
             "court": root / "models/court.pt",
             "court_architecture": root / "external/TennisCourtDetector/tracknet.py",
         }
+        if settings.ball_model == "tracknet-v2":
+            files["tracknet"] = root / "models/tracknet_ball.pt"
+            files["tracknet_architecture"] = root / "external/TrackNet/model.py"
         for kind in ("ball", "court"):
             bundle = getattr(settings, f"{kind}_bundle")
             if bundle:
@@ -223,8 +231,15 @@ def _analyze(
     inference_finished = False
     try:
         progress(0, "Loading models")
+        # Older injected adapters take five arguments; pass the ball model only when chosen.
+        extra = {"ball_model": settings.ball_model} if settings.ball_model != "yolo-coco" else {}
         models = model_factory(
-            root, settings.device, settings.ball_bundle, settings.court_bundle, metadata["fps"]
+            root,
+            settings.device,
+            settings.ball_bundle,
+            settings.court_bundle,
+            metadata["fps"],
+            **extra,
         )
         ball_tracker = create_ball_tracker(settings.ball_tracker, settings.overlay_masks)
         scene_monitor = SceneMonitor()
