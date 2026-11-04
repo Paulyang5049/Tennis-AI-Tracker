@@ -1,6 +1,7 @@
 """Render README figures from the checked-in local validation snapshot."""
 
 import json
+from datetime import date
 from pathlib import Path
 
 import matplotlib
@@ -27,7 +28,11 @@ def save(fig, name):
     plt.close(fig)
 
 
-fig = base("Local validation, at a glance", "Measured 10 Sep 2026  /  development build", 5.6)
+fig = base(
+    "Local validation, at a glance",
+    f"Measured {date.fromisoformat(DATA['date']).strftime('%d %b %Y')}  /  development build",
+    5.6,
+)
 video, native = DATA["full_video"], DATA["native_excerpt"]
 cards = [
     (
@@ -40,7 +45,12 @@ cards = [
         "Swift tests",
         "Core contract + storage",
     ),
-    (f"{video['frames']:,}", "Full-video frames", "Expected 41,564 / all retained"),
+    (
+        f"{video['frames']:,}",
+        "Full-video frames",
+        f"Expected {video['expected_frames']:,} / "
+        + ("all retained" if video["frames"] == video["expected_frames"] else "count mismatch"),
+    ),
     (
         f"{native['frames']} / {native['ffmpeg_frames']}",
         "Native excerpt frames",
@@ -73,7 +83,7 @@ save(fig, "validation-checks.png")
 
 fig = base(
     "One complete broadcast clip",
-    "11 min 34 sec  /  1,920 × 1,080  /  41,564 frames  /  audio retained",
+    f"{round(video['duration_seconds']) // 60} min {round(video['duration_seconds']) % 60} sec  /  {video['width']:,} × {video['height']:,}  /  {video['frames']:,} frames  /  audio retained",
     7.2,
 )
 ax = fig.add_axes((0.18, 0.49, 0.76, 0.25), facecolor=CREAM)
@@ -110,10 +120,21 @@ fig.text(
     size=11,
     color=MUTED,
 )
-fig.text(0.055, 0.33, "190 unreviewed event candidates", fontsize=18, weight="bold")
+fig.text(
+    0.055,
+    0.33,
+    f"{sum(video['candidates'].values())} unreviewed event candidates",
+    fontsize=18,
+    weight="bold",
+)
 for i, (kind, count) in enumerate(video["candidates"].items()):
     fig.text(0.055 + i * 0.28, 0.24, f"{count}  {kind.lower()}", size=22, weight="bold")
-fig.text(0.055, 0.15, "0 confirmed events. Candidate counts are not match statistics.", size=12)
+fig.text(
+    0.055,
+    0.15,
+    f"{video['reviewed_events']} confirmed events. Candidate counts are not match statistics.",
+    size=12,
+)
 fig.text(
     0.055,
     0.065,
