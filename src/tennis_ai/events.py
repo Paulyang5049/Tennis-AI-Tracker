@@ -513,17 +513,107 @@ def apply_corrections(events, corrections):
     }
 
 
-def regenerate_events(frames_path, events_path, corrections_path=None, detector="baseline-v1"):
+SHOULDERS = (5, 6)
+SPIN_DETECTORS = ("wrist-v1",)
+
+
+def _arm_heights(player, floor=0.3):
+    """Each wrist's height below the shoulder line, in player heights; None if not visible."""
+    pose = player.get("pose") or []
+    if len(pose) <= max(WRISTS) or any(pose[i][2] < floor for i in SHOULDERS):
+        return {}
+    x1, y1, x2, y2 = player["box"]
+    shoulder = (pose[SHOULDERS[0]][1] + pose[SHOULDERS[1]][1]) / 2
+    return {
+        wrist: (pose[wrist][1] - shoulder) / max(1.0, y2 - y1)
+        for wrist in WRISTS
+        if pose[wrist][2] >= floor
+    }
+
+
+def _spin_from_swing(samples, before=-0.08, after=-0.04, change=0.15, overhead=-0.6):
+    best = None
+    for wrist in WRISTS:
+        series = [(dt, h) for dt, w, h in samples if w == wrist]
+        early = [h for dt, h in series if dt <= before]
+        late = [h for dt, h in series if dt >= after]
+        if early and late:
+            spread = max(h for _, h in series) - min(h for _, h in series)
+            if best is None or spread > best[0]:
+                best = (spread, early, late)
+    if best is None:
+        return "unknown"
+    _, early, late = best
+    if min(early) < overhead:
+        return "unknown"  # A serve or overhead also swings downward; it is not a slice.
+    delta = sum(late) / len(late) - sum(early) / len(early)
+    if delta >= change:
+        return "slice"
+    return "topspin" if delta <= -change else "unknown"
+
+
+def annotate_spin(events, frames, detector="wrist-v1", before=0.3, after=0.1):
+    """Opt-in, unvalidated spin candidates for automatic, unreviewed hits.
+
+    A swing whose wrist travels from high to low relative to the shoulder line
+    through contact suggests slice; low to high suggests topspin. A wrist far
+    above the shoulders before contact (serve or overhead) stays unknown.
+    Reviewed and manual hits are never changed.
+    """
+    if detector not in SPIN_DETECTORS:
+        raise ValueError("Unsupported spin detector version")
+    events = [deepcopy(event) for event in events]
+    targets = sorted(
+        (
+            e
+            for e in events
+            if e["kind"] == "hit"
+            and e["provenance"] == "automatic"
+            and not e["reviewed"]
+            and e["player_id"] is not None
+        ),
+        key=lambda e: e["start"],
+    )
+    samples: dict[str, list[tuple[float, int, float]]] = {e["id"]: [] for e in targets}
+    first = 0
+    for frame in frames:
+        timestamp = float(frame["timestamp"])
+        while first < len(targets) and targets[first]["start"] + after < timestamp:
+            first += 1
+        for event in targets[first:]:
+            if event["start"] - before > timestamp:
+                break
+            if int(frame.get("scene", 0)) != event["scene"]:
+                continue
+            player = next(
+                (p for p in frame.get("players", []) if p["id"] == event["player_id"]), None
+            )
+            if player is not None:
+                for wrist, height in _arm_heights(player).items():
+                    samples[event["id"]].append((timestamp - event["start"], wrist, height))
+    for event in targets:
+        event["spin"] = _spin_from_swing(samples[event["id"]])
+    return events
+
+
+def regenerate_events(
+    frames_path, events_path, corrections_path=None, detector="baseline-v1", spin_detector=None
+):
     with Path(frames_path).open() as stream:
-        candidates = generate_candidates(
-            (json.loads(line) for line in stream if line.strip()), detector
+        candidates = list(
+            generate_candidates((json.loads(line) for line in stream if line.strip()), detector)
         )
-        corrections = (
-            json.loads(Path(corrections_path).read_text())
-            if corrections_path and Path(corrections_path).exists()
-            else {}
-        )
-        document = apply_corrections(candidates, corrections)
+    if spin_detector:
+        with Path(frames_path).open() as stream:
+            candidates = annotate_spin(
+                candidates, (json.loads(line) for line in stream if line.strip()), spin_detector
+            )
+    corrections = (
+        json.loads(Path(corrections_path).read_text())
+        if corrections_path and Path(corrections_path).exists()
+        else {}
+    )
+    document = apply_corrections(candidates, corrections)
     atomic_json(events_path, document)
     return document
 
