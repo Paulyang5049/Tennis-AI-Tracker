@@ -1,205 +1,122 @@
-# Tennis AI · Local
+<p align="center">
+  <img src="docs/images/hero.svg" alt="Tennis AI Local: Your match. Your memories. On your machine." width="100%">
+</p>
 
-![Tennis AI: Your match. Your memories. On your machine.](docs/images/hero.svg)
+<h3 align="center">Private tennis video analysis that runs on your own Mac or iPhone.<br>Track the ball, the players and the court, then review every shot.</h3>
 
-[![Tests](https://github.com/Paulyang5049/Tennis-AI-Tracker/actions/workflows/test.yml/badge.svg)](https://github.com/Paulyang5049/Tennis-AI-Tracker/actions/workflows/test.yml)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-[![Open Ball Training in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Paulyang5049/Tennis-AI-Tracker/blob/main/notebooks/01_train_ball_yolo26.ipynb)
+<p align="center">
+  <a href="https://github.com/Paulyang5049/Tennis-AI-Tracker/actions/workflows/test.yml"><img src="https://github.com/Paulyang5049/Tennis-AI-Tracker/actions/workflows/test.yml/badge.svg" alt="Python tests"></a>
+  <a href="https://github.com/Paulyang5049/Tennis-AI-Tracker/actions/workflows/ios.yml"><img src="https://github.com/Paulyang5049/Tennis-AI-Tracker/actions/workflows/ios.yml/badge.svg" alt="iOS tests"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg" alt="License: AGPL v3"></a>
+  <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-3776AB" alt="Python 3.11 to 3.13">
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20iOS%2026-lightgrey" alt="macOS and iOS 26">
+  <a href="https://colab.research.google.com/github/Paulyang5049/Tennis-AI-Tracker/blob/main/notebooks/01_train_ball_yolo26.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open ball training in Colab"></a>
+</p>
 
-Record the rallies. Revisit the details. Keep your videos private.
+<p align="center"><b>English</b> · <a href="README.zh-CN.md">简体中文</a></p>
 
-Tennis AI Local is an open-source desktop app for analyzing and replaying full-court tennis videos. It runs YOLO26 locally on Apple Silicon or CPU, supports singles and doubles, and provides Google Colab notebooks for model training. Model setup needs internet access; normal video analysis runs locally.
+---
 
-## A look inside
+## Why Tennis AI Local
 
-![Development preview: court-green and tennis-yellow desktop interface with match library, review, events and settings tabs](docs/images/desktop-preview.png)
+- **Your footage stays with you.** After a one-time model download, analysis runs locally on Apple Silicon, CPU or CUDA. No account, no upload, no server.
+- **Made for real matches.** Singles or doubles, from a fixed full-court phone recording or a broadcast clip.
+- **Evidence you can check.** Automatic detections stay labelled as candidates. Only events you review count in statistics, and every number links back to the frames behind it.
+- **Open from end to end.** Models, training notebooks, data contracts and validation results are all in this repository.
 
-*Actual running development preview in its empty state. This redesigned interface is not yet included in the main-branch installation. No match results are simulated.*
+## See it
 
-![Workflow: import a recording, analyze locally, review exact frames, export the replay](docs/images/workflow.svg)
-
-## Measured results
-
-![Local validation: 72 Python tests and 12 Swift tests passed; 41,564 full-video frames retained; native excerpt matches all 179 FFmpeg frames](docs/images/validation-checks.png)
-
-*Local checks on 10 September 2026. The native 179-frame test uses a three-second excerpt, not the full match. Builds target iOS 26 and were checked with Xcode 27 beta; no signed physical-device performance result is claimed.*
-
-![Full broadcast: observed ball 49.6%, interpolated 6.5%, missing 43.9%; court calibrated 50.6%; 190 unreviewed event candidates](docs/images/validation-broadcast.png)
-
-The complete 11-minute-34-second broadcast retained all **41,564 frames and its audio track**. Reopening, synchronized replay and point-event clip export passed. The 112 hit, 54 bounce and 24 rally candidates remain unreviewed; **confirmed statistics are zero**. Coverage measures whether an estimate exists, not whether it is correct.
-
-| Actual annotated output, 30.01 s | Observed failure, 10.01 s |
-|---|---|
-| ![Actual output showing court lines, two selected players and model overlays](docs/images/broadcast-result.jpg) | ![Actual model output with a ball false positive on the yellow scoreboard serve icon](docs/images/broadcast-false-positive.jpg) |
-| Court, player, pose and trajectory overlays from the completed run. | The yellow scoreboard icon was mistaken for the ball. Player IDs also change over time. |
-
-*Frames from the user-supplied broadcast test footage, shown as diagnostic examples. These images do not establish detection accuracy or ownership of the broadcast.*
-
-See [validation details](VALIDATION.md) and the [chart data snapshot](docs/data/validation-2026-09-10.json). Figures can be regenerated with `.venv/bin/python scripts/render_validation_charts.py` in the project environment.
-
-## iOS interface
-
-The native app uses SwiftUI screens for a private match library, video review and event correction.
+![Desktop review app with match library, replay, event review and settings](docs/images/desktop-preview.png)
 
 <table>
   <tr><th>Match library</th><th>Video review</th><th>Event editor</th></tr>
   <tr>
-    <td><img src="docs/images/ios-library.png" width="260" alt="Actual SwiftUI match library with singles or doubles selection and a UI demo recording"></td>
-    <td><img src="docs/images/ios-review.png" width="260" alt="Actual SwiftUI review screen with frame controls, offline analysis, court calibration and event tools"></td>
-    <td><img src="docs/images/ios-editor.png" width="260" alt="Actual SwiftUI bounce editor with optional landing coordinates, reviewed, exclude and favorite controls"></td>
+    <td><img src="docs/images/ios-library.png" width="240" alt="iPhone match library with singles or doubles selection"></td>
+    <td><img src="docs/images/ios-review.png" width="240" alt="iPhone review screen with frame controls, offline analysis, court calibration and event tools"></td>
+    <td><img src="docs/images/ios-editor.png" width="240" alt="iPhone bounce editor with landing coordinates and review controls"></td>
   </tr>
 </table>
 
-*Actual iPhone 17 Pro / iOS 27 simulator captures of the production SwiftUI views. An isolated showcase launches each screen directly with a three-second solid-green **UI demo** video and an unsaved example event. The green video area is deliberate fixture content. No match detections or confirmed results are simulated; these screenshots demonstrate the current interface, not a completed tap-by-tap acceptance test.*
+<sub>Desktop app in its empty state and iPhone simulator captures of the native SwiftUI screens. The green video area is a UI test fixture; no match results are simulated.</sub>
 
-Library → choose a recording → review frames and calibrate the court → correct events → export a clip. Source and build instructions: [ios/README.md](ios/README.md). Physical-device performance, thermal behavior and accuracy remain [validation gates](docs/IMPLEMENTATION_STATUS.md).
+## What it does today
 
-## Built for your tennis life
+| Capability | Status |
+|---|---|
+| Player detection, tracking and body pose (singles and doubles) | ✅ Works. IDs can still switch after long occlusions |
+| Ball detection with a short trail | ✅ Works. Tiny far-court balls and spare balls remain hard |
+| Court keypoints and a live mini-court | ✅ Works, with four-corner manual calibration as a fallback |
+| Synchronized replay, exact-frame review and clip export with audio | ✅ Works |
+| Pause and resume long analyses; portable analysis folders | ✅ Works |
+| Hit, bounce and rally candidates | 🧪 Experimental. Review before they count; try `--event-detector contact-v2` |
+| Stroke type (serve, forehand, backhand, volley, overhead) | ✍️ Manual labels today; automatic classification is planned |
+| Native iPhone app (SwiftUI, AVFoundation, Core ML) | 🧪 Developer build from source; not on the App Store |
+| Accuracy on labelled phone footage | 🔜 Waiting for labelled matches. [Help wanted](#help-build-it) |
 
-A recording can preserve a match, a friendship, a difficult training day and the small improvements that accumulate over time. This project helps players revisit those moments without sending personal footage to a server.
-
-- **Follow the action:** track the ball and two or four players; overlay poses and racket detections.
-- **See the court:** draw court geometry and estimated player ground positions.
-- **Review with control:** synchronized replay, exact-frame inspection, manual court calibration and player labels.
-- **Keep your work:** export an annotated video, per-frame JSONL and a run summary.
-- **Experiment openly:** train a dedicated ball detector with the included Colab notebooks.
-
-This is an early-stage research and development tool. Coverage is not accuracy. The experimental trained ball candidate failed its held-out promotion gate, so the pretrained baseline remains the default. Read the measured results and limitations in [VALIDATION.md](VALIDATION.md).
-
-## In this development branch
-
-The offline upgrade adds portable analysis folders, interruption recovery, saved-match review, candidate event editing, clip export and annotation tools. These additions are undergoing validation; native iOS source is a development app, not an App Store release.
-
-## Offline iPhone development
-
-The native iOS 26 source and build instructions are in [ios/README.md](ios/README.md). The Python app remains the training, annotation and evaluation workspace. See [implementation status](docs/IMPLEMENTATION_STATUS.md) for verified functionality and the remaining phone-validation gates. A successful model conversion or core unit test does not establish iPhone accuracy or sustained match-length performance.
-
-## Start on this Mac
-
-Clone the repository, then from the project folder:
+## Quick start (macOS)
 
 ```sh
 git clone https://github.com/Paulyang5049/Tennis-AI-Tracker.git
 cd Tennis-AI-Tracker
 brew install ffmpeg uv
-uv venv --python 3.11 .venv
-uv pip install --python .venv/bin/python -e '.[dev]'
-.venv/bin/tennis-ai setup
-.venv/bin/tennis-ai app
+uv venv --python 3.11 .venv && uv pip install --python .venv/bin/python -e '.[dev]'
+.venv/bin/tennis-ai setup   # downloads the models once
+.venv/bin/tennis-ai app     # opens http://127.0.0.1:7860
 ```
 
-Open http://127.0.0.1:7860. Upload a video, select Singles or Doubles, and click **Analyze video**. The app runs one background job at a time to bound memory use. Cancel finishes the current inference call, then stops. Large videos stay on disk.
-
-**Replay:** original and annotated videos synchronize playback, seeking and speed. The annotated player is muted to prevent doubled audio. The exact-frame reviewer below is authoritative for frame stepping. Select overlays without inference; click **Re-export from cached predictions** to regenerate downloads.
-
-**Court correction:** show a frame, then click the original image's far-left, far-right, near-left, near-right *outer doubles-court corners*. Save the four corners. Corrections persist until a camera cut/movement or the next correction. Refresh the frame to clear an unfinished selection. Review updates immediately; re-export updates video/JSONL.
-
-**Player labels:** inspect the frame's scene and player IDs. Enter a mapping such as `{"3": "Paul", "5": "Partner"}`. Labels apply to those track IDs within that scene. IDs reset after camera cuts; this is not cross-camera person recognition.
-
-**Custom weights:** unzip a Colab bundle into `models/`, enter its absolute folder in the app, and click its verification button. Both checksum and dependency compatibility are checked before inference. Only load checkpoints from a source you trust. Leave the fields blank to retain pretrained models.
-
-## Reproduce installation
-
-Requires Python 3.11, 3.12 or 3.13 and FFmpeg on your path. Python 3.11 is the tested local environment; the training workflow is also exercised with Python 3.13 in Colab.
+Upload a video, choose Singles or Doubles and click **Analyze video**. Prefer the terminal?
 
 ```sh
-uv venv --python 3.11 .venv
-uv pip install --python .venv/bin/python -e '.[dev]'
-.venv/bin/tennis-ai setup
-.venv/bin/tennis-ai app
+.venv/bin/tennis-ai analyze my-match.mp4 --output outputs/my-match
 ```
 
-`setup` downloads YOLO26s detection, YOLO26s pose, the specialist court checkpoint and its original architecture. Assets are stored only in ignored `models/` and `external/` folders. Checksums and source revision are recorded in `models/provenance.json`. If the court download is unavailable, run `setup --without-court` and use manual calibration.
+Next: [usage guide](docs/USAGE.md) · [iPhone build](ios/README.md) · [train a ball detector in Colab](notebooks/01_train_ball_yolo26.ipynb)
 
-For a different working directory, pass `--root /absolute/path/to/AI_tennis` **before** the command. `auto` chooses CUDA, then MPS, then CPU. An MPS runtime error triggers a logged CPU retry; select CPU explicitly to diagnose GPU problems. Model downloads happen during setup, not normal analysis.
+## How it works
 
-## Command line
+![Workflow: import a recording, analyze locally, review exact frames, export the replay](docs/images/workflow.svg)
 
-```sh
-.venv/bin/tennis-ai analyze path/to/video.mp4 --output outputs/my-match --players 4
-.venv/bin/tennis-ai analyze path/to/video.mp4 --output outputs/custom-match --ball-bundle models/ball-bundle
-.venv/bin/tennis-ai resume outputs/my-match
-.venv/bin/tennis-ai render outputs/my-match
-.venv/bin/tennis-ai package outputs/my-match outputs/portable-match
-.venv/bin/tennis-ai clip outputs/my-match --start 10 --end 18 --output outputs/rally.mp4
-.venv/bin/tennis-ai benchmark benchmark.json --split test --output outputs/metrics.json
-.venv/bin/tennis-ai evaluate outputs/my-match/frames.jsonl annotations.jsonl --output metrics.json
-```
+1. **Detect.** YOLO26 finds players, rackets and the ball in every frame; a pose model adds body keypoints.
+2. **Track.** ByteTrack keeps player identities, a temporal gate selects one ball, and gaps are only bridged between nearby observations.
+3. **Map the court.** A heatmap model finds 14 court keypoints and fits the court geometry, so positions appear on a mini-court.
+4. **Review.** Candidates for hits, bounces and rallies are listed against the video. You confirm, correct or exclude them, and only reviewed facts enter statistics.
 
-An analysis folder contains:
+Everything is written to a self-contained analysis folder with versioned [data contracts](contracts/README.md) shared by the Python and Swift apps.
 
-| File | Purpose |
-|---|---|
-| `manifest.json` | Version 2 relative paths, source hash, media coordinates and model provenance |
-| `events.json` | Candidate and reviewed hit, bounce and rally events |
-| `annotated.mp4` | Timestamped H.264 replay with source audio encoded to AAC |
-| `frames.jsonl` | Final per-frame detections, court, pose, player labels and ball status |
-| `summary.json` | Settings, versions, status, runtime, observed/interpolated ball coverage and court availability |
-| `cache.sqlite` | Raw predictions for inference-free re-rendering |
-| `review.sqlite` | Indexed corrected records for exact-frame review |
-| `corrections.json` | Optional per-frame court correction and per-scene player labels |
+## Measured, not promised
 
-New analyses copy the original video into their folder; moving the entire folder preserves access. Legacy runs with external media can be converted with `package` while their source is still available. Re-export verifies the source SHA-256. Resume validates source, settings, model weights, code and runtime versions, then restores predictions and tracker state from the last committed checkpoint; up to 29 uncommitted frames may be recomputed. A changed analysis environment requires a new run.
+![Local validation checks](docs/images/validation-checks.png)
 
-Use **Saved analyses** to reopen completed runs or resume a paused job. Under event review, inspect candidates, correct times/types/player IDs, mark reviewed events, exclude false detections and export a selected interval with audio. Only reviewed, non-excluded events enter verified statistics; automatic candidates remain a separate count. Ball annotations distinguish a confirmed absence from an unlabelled frame. See [annotation and benchmark instructions](docs/ANNOTATION.md).
+![Full broadcast run: ball observed in 49.6% of frames, interpolated in 6.5%, court calibrated in 50.6%; 190 unreviewed event candidates](docs/images/validation-broadcast.png)
 
-## Google Colab
+<sub>Development checks from 10 September 2026. Coverage shows whether an estimate exists, not whether it is correct. Labelled accuracy, iPhone performance and battery results are still open; see [VALIDATION.md](VALIDATION.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md).</sub>
 
-Use the Colab badge above or open either notebook from the `notebooks/` folder. Select a GPU runtime. The notebook installs the versioned project wheel from the GitHub release.
+## Roadmap
 
-1. `01_train_ball_yolo26.ipynb`: download/audit the 578-image ball dataset, inspect labels, smoke-test training, fine-tune YOLO26s at 1280 px, compare against the COCO sports-ball baseline and export a bundle.
-2. `02_finetune_court.ipynb`: download/audit court data, verify pretrained inference, optionally fine-tune the original heatmap model and export a court bundle.
+- [x] Local analysis, synchronized replay and exact-frame review
+- [x] Portable analysis packages, resume after interruption, clip export with audio
+- [x] Shared Python/Swift data contracts and a native iOS developer build
+- [x] Gap-tolerant hit candidates (`contact-v2`, experimental)
+- [ ] Validate contact detection on human-labelled clips
+- [ ] Spin and technique labels (topspin, slice, flat)
+- [ ] Multi-frame ball detector for small, fast far-court balls
+- [ ] Labelled phone-footage benchmark, singles first
+- [ ] TestFlight beta
 
-Data and active training are on `/content`; resumable checkpoints and final bundles go to `MyDrive/TennisAI`. Ball defaults: 100 maximum epochs, patience 20, batch 4 with 2/1 retries for CUDA memory errors. Use `RESUME=True` in the ball notebook after a runtime disconnect. Court resumes from its Drive optimizer/epoch checkpoint automatically.
+The detailed plan is in [docs/plans](docs/plans/2026-09-11-1411-feat-tennis-coaching-intelligence-plan.md).
 
-The `v0.2.0` release includes an experimental ball bundle from a completed Tesla T4 run. It improved recall on the validation split but failed the untouched test split and produced more false detections, so the app continues to use the COCO sports-ball model by default. The bundle is published to make the result reproducible and to give contributors a concrete baseline for improving data splits, labels and training settings. See [VALIDATION.md](VALIDATION.md) for the measured results.
+## Help build it
 
-The wheel pins the same PyTorch/Ultralytics versions used locally. If Colab replaces an already imported dependency, restart the runtime and continue after installation. GPU quota or download availability may stop a training run; the local baseline does not depend on training success.
+- **Play tennis?** A clearly described failure case is valuable even without code. Footage needs the consent of everyone who can be identified in it; use the [footage contribution form](https://github.com/Paulyang5049/Tennis-AI-Tracker/issues/new?template=footage_contribution.yml).
+- **Like labelling?** The [annotation guide](docs/ANNOTATION.md) explains how ball, contact and bounce labels feed the benchmark.
+- **Write code?** Start with [CONTRIBUTING.md](CONTRIBUTING.md) and issues tagged [good first issue](https://github.com/Paulyang5049/Tennis-AI-Tracker/labels/good%20first%20issue).
 
-To regenerate deliverables after code changes:
+If this project is useful to you, a ⭐ helps other players find it.
 
-```sh
-.venv/bin/python scripts/build_notebooks.py
-uv build --wheel --out-dir colab_delivery
-```
+## Citation
 
-## Models and limitations
+If you use Tennis AI Local in research, please cite it using the metadata in [CITATION.cff](CITATION.cff) (GitHub shows a **Cite this repository** button).
 
-- **Players/rackets:** pretrained YOLO26s at 1280 px; ByteTrack tracks person detections. Court-region filtering and a stable-ID preference select up to two/four players. Spectators near a court can still be selected; labels do not fix incorrect detections.
-- **Body:** YOLO26s-pose at 640 px, matched one-to-one by box overlap. Missing/low-confidence joints are not drawn.
-- **Ball:** pretrained sports-ball class until a custom single-class YOLO26s bundle is selected. A motion/position gate chooses one ball; stationary spare balls and tiny far-court balls remain difficult.
-- **Court:** 14 keypoints from the original 15-channel heatmap model, RANSAC geometry fit, recalibration at least once per second and after camera movement/cuts. Manual geometry is available when the model cannot fit.
-- **Ball gaps:** only gaps bounded by observations within 100 ms, within one scene, are interpolated. Hollow yellow dots mean inferred points; unknown intervals are never joined.
-- **Miniature court:** ground-contact estimates from ankles or box bottoms. An airborne ball is not projected as a landing point. Heuristic direction changes generate bounce/contact candidates, without verified accuracy. Five stroke labels can be assigned manually; automatic strokes remain `unknown`. Only confirmed ground-contact locations appear in landing statistics. Scoring, measured ball speed and coaching diagnosis are not implemented.
-- **Video:** each decoded frame is processed, source presentation timestamps are normalized to start at zero and preserved to 1/90,000 second resolution in output. Audio is re-encoded, not bit-identical. Original orientation should be baked into pixels; rotated phone video is handled as described in the validation report. Full-court views are the target; cut detection is heuristic and can miss dissolves or rapid pans.
+## License
 
-## Accuracy evaluation
-
-Coverage is *not* accuracy. No accuracy metric is fabricated from confidence scores. Supply held-out annotated JSONL, one line per labeled frame:
-
-```json
-{"frame": 42, "category": "phone-doubles", "ball": [621, 310], "players": [{"id": "near-left", "box": [100, 200, 180, 430]}], "rackets": [[165, 255, 205, 305]]}
-```
-
-Omit unlabelled fields. `"ball": null` means a confirmed absence. `court`, when supplied, is 14 `[x,y]` points or null entries in upstream order. Record ground-truth player identities consistently across a scene. Use categories such as `phone-singles`, `phone-doubles`, `broadcast-singles`, `broadcast-doubles` and run each clip separately.
-
-The evaluator reports observed-ball precision/recall at a configurable pixel tolerance (default 6 px; scale for your resolution), racket recall at IoU 0.5, matched-player ID switches, and median court-point error. Pair these with coverage and runtime from the run summary. Missing annotation fields produce null metrics. Sparse annotations can undercount ID switches. Test separate phone/broadcast clips with occlusions, far-court balls, spare balls, spectators and camera cuts. Promote a ball candidate only when held-out observed coverage improves without more false detections.
-
-## Checks
-
-```sh
-.venv/bin/ruff check src scripts tests
-.venv/bin/ruff format --check src scripts tests
-.venv/bin/mypy src
-.venv/bin/pytest -q
-```
-
-See `VALIDATION.md` for the exact checks run and what remains unverified. See `THIRD_PARTY.md` for sources and reuse boundaries.
-
-## Contributing and community
-
-If you play tennis, a carefully described failure case is valuable even if you do not write code. If you develop software or work in computer vision, the roadmap includes better small-ball recall, stable doubles identities, phone-camera court calibration, contact timing, bounce detection and useful performance summaries.
-
-Please open a focused issue before a large change. Do not upload private match footage without every identifiable participant's permission. Contribution instructions, dataset rules and the project conduct policy are in [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
-
-Tennis AI Local is released under GNU AGPL v3. The downloaded models, datasets and third-party repositories keep their own terms; see [THIRD_PARTY.md](THIRD_PARTY.md).
+Tennis AI Local is released under the [GNU AGPL v3](LICENSE). Downloaded models, datasets and third-party repositories keep their own terms; see [THIRD_PARTY.md](THIRD_PARTY.md). Please read the [code of conduct](CODE_OF_CONDUCT.md) and [security policy](SECURITY.md).

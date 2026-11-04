@@ -64,3 +64,12 @@ The broadcast smoke run reported 73.3% observed-ball coverage, 13.3% interpolate
 - Phone singles, phone doubles and broadcast doubles accuracy require representative videos plus held-out annotations. The included evaluator reports per-category results once those labels exist.
 - The court dataset archive download and its redistribution terms were not independently confirmed. The notebook stops with a clear error and retains the pretrained model if the archive is unavailable.
 - Scene-cut and camera-motion detection are heuristic. Dissolves, zooms and rapid pans need validation on the target footage.
+
+## Gap-tolerant hit candidates — 2026-11-04
+
+Thirteen user-supplied broadcast clips (two matches, 1920×1080 at 25 fps, 3,786 frames, all tagged as slice examples) were analysed with the default pipeline on an Apple M4 at about 7.3 frames per second. The clips and outputs remain outside version control. No human contact labels exist, so the figures below are development evidence, not accuracy.
+
+- Ball positions: 128 randomly sampled observed positions were inspected; about 126 were the match ball. One run of six frames selected a spare ball held by a ball kid. No scoreboard false positive occurred.
+- Contacts were approximated by trajectory changes between the near and far halves of the image. `baseline-v1` placed a hit candidate within those contact windows for 28 of 78 contacts in the tuning match and 6 of 23 in the other match. For most missed contacts the ball was unobserved for at least two of the seven frames around the contact.
+- `contact-v2` (opt-in) covered 74 of 78 and 22 of 23 of the same windows, from cached frames. A visual check of 24 candidates found only by `contact-v2` judged 19 as real hits; the false ones were serve tosses at clip start and movement after a dead ball. Five of 103 consecutive hit pairs repeated the same player.
+- Contact timing was not validated; far-court contacts may be offset by 0.1–0.3 s. The near-side confirmation line was tightened after a serve-toss false positive in the tuning match; the same failure also appeared in the other match, so it is not a fully untouched test.
