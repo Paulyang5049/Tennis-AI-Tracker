@@ -93,6 +93,8 @@ def create_app(root):
         resume=False,
         ball_tracker="baseline-v1",
         event_detector="baseline-v1",
+        stroke_detector=None,
+        spin_detector=None,
     ):
         if not current and not video:
             raise gr.Error("Choose a recording before starting analysis.")
@@ -133,6 +135,8 @@ def create_app(root):
                             (court or "").strip() or None,
                             ball_tracker=ball_tracker,
                             event_detector=event_detector,
+                            stroke_detector=stroke_detector,
+                            spin_detector=spin_detector,
                         ),
                         job["cancel"],
                         update,
@@ -635,6 +639,20 @@ def create_app(root):
                         info="contact-v2 tolerates missing ball frames at contact; "
                         "experimental and unvalidated",
                     )
+                    stroke_detector = gr.Dropdown(
+                        [("Off", ""), ("stroke-v1", "stroke-v1")],
+                        value="",
+                        label="Stroke type candidates",
+                        info="Suggests serve, forehand, backhand or volley for automatic hits, "
+                        "assuming right-handed players; experimental and unvalidated",
+                    )
+                    spin_detector = gr.Dropdown(
+                        [("Off", ""), ("wrist-v1", "wrist-v1")],
+                        value="",
+                        label="Spin candidates",
+                        info="Suggests topspin or slice from the wrist path; "
+                        "experimental and unvalidated",
+                    )
                 with gr.Accordion("Custom Colab model bundles", open=False):
                     ball = gr.Textbox(
                         label="Local ball bundle folder",
@@ -670,8 +688,28 @@ def create_app(root):
             [job_state, status],
         )
         run.click(
-            lambda v, m, d, b, c, t, e: start(v, m, d, b, c, ball_tracker=t, event_detector=e),
-            [video, mode, device, ball, court, ball_tracker, event_detector],
+            lambda v, m, d, b, c, t, e, s, p: start(
+                v,
+                m,
+                d,
+                b,
+                c,
+                ball_tracker=t,
+                event_detector=e,
+                stroke_detector=s or None,
+                spin_detector=p or None,
+            ),
+            [
+                video,
+                mode,
+                device,
+                ball,
+                court,
+                ball_tracker,
+                event_detector,
+                stroke_detector,
+                spin_detector,
+            ],
             [job_state, status],
         )
         stop.click(cancel, job_state, status, queue=False)

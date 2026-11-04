@@ -12,6 +12,9 @@ def test_experimental_processing_options_default_to_baselines(tmp_path):
     assert dropdowns["Ball tracker"].value == "baseline-v1"
     assert dropdowns["Hit candidate detector"].value == "baseline-v1"
     assert ("contact-v2", "contact-v2") in dropdowns["Hit candidate detector"].choices
+    assert dropdowns["Stroke type candidates"].value == ""
+    assert ("stroke-v1", "stroke-v1") in dropdowns["Stroke type candidates"].choices
+    assert dropdowns["Spin candidates"].value == ""
 
 
 def test_progress_escapes_untrusted_status_and_never_uses_simulated_progress():

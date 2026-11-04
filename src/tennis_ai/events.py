@@ -1,7 +1,8 @@
 """Experimental temporal candidates and durable human event review.
 
-Candidates deliberately do not infer stroke labels or ground-plane ball positions.
-Only reviewed, non-excluded records may drive measured statistics.
+Candidates do not infer ground-plane ball positions. Stroke and spin labels come only
+from opt-in candidate rules. Only reviewed, non-excluded records may drive measured
+statistics.
 """
 
 import json
@@ -596,18 +597,189 @@ def annotate_spin(events, frames, detector="wrist-v1", before=0.3, after=0.1):
     return events
 
 
-def regenerate_events(
-    frames_path, events_path, corrections_path=None, detector="baseline-v1", spin_detector=None
-):
-    with Path(frames_path).open() as stream:
-        candidates = list(
-            generate_candidates((json.loads(line) for line in stream if line.strip()), detector)
-        )
-    if spin_detector:
-        with Path(frames_path).open() as stream:
-            candidates = annotate_spin(
-                candidates, (json.loads(line) for line in stream if line.strip()), spin_detector
+STROKE_DETECTORS = ("stroke-v1",)
+NET_Y = 11.885  # Court metres from the far baseline, the v2 origin.
+
+
+def _stroke_sample(frame, player):
+    """Hitter-relative observations; lateral offsets are positive on the player's right."""
+    x1, y1, x2, y2 = player["box"]
+    height = max(1.0, y2 - y1)
+    position = (player.get("court_position") or {}).get("position_court_m")
+    side = player.get("side")
+    if side not in ("near", "far") and position:
+        side = "near" if position[1] > NET_Y else "far"
+    if side not in ("near", "far"):
+        return None
+    # A fixed camera behind one baseline sees the near player's back and the far
+    # player's front, so the far player's right is the image's left.
+    mirror = 1 if side == "near" else -1
+    centre = (x1 + x2) / 2
+    pose = player.get("pose") or []
+    ball = frame.get("ball", {})
+    offset = None
+    if ball.get("status") == "observed" and ball.get("xy"):
+        offset = mirror * (ball["xy"][0] - centre) / height
+        if abs(offset) >= 1.5:
+            offset = None  # Too far from this player to be the incoming ball.
+    return {
+        "court_y": position[1] if position else None,
+        "ball": offset,
+        "wrists": [
+            mirror * (pose[wrist][0] - centre) / height
+            for wrist in WRISTS
+            if len(pose) > wrist and pose[wrist][2] >= 0.3
+        ],
+        "heights": _arm_heights(player),
+    }
+
+
+def _mean(values):
+    return sum(values) / len(values) if values else None
+
+
+def _hitting_side(ball, swing, strong=0.2, weak=0.15):
+    """+1 for the player's right, -1 for the left, 0 when the cues are weak or disagree.
+
+    The incoming ball passes the hitting side just before contact. A forehand swing
+    also travels from the player's right to the left, and a backhand the other way.
+    """
+    if ball is not None and abs(ball) >= strong:
+        if swing is not None and abs(swing) >= strong and (swing > 0) != (ball > 0):
+            return 0
+        return 1 if ball > 0 else -1
+    if swing is not None and abs(swing) >= weak:
+        if ball is not None and abs(ball) >= 0.1 and (ball > 0) != (swing > 0):
+            return 0
+        return 1 if swing > 0 else -1
+    return 0
+
+
+def _overhead(samples, threshold=-0.22):
+    """A wrist far above the shoulders around contact, as in a serve or smash."""
+    return any(
+        height <= threshold
+        for dt, sample in samples
+        if -0.45 <= dt <= 0.1
+        for height in sample["heights"].values()
+    )
+
+
+def annotate_strokes(events, frames, detector="stroke-v1", rally_gap=2.0):
+    """Opt-in, unvalidated stroke candidates for automatic, unreviewed hits.
+
+    - serve: a wrist far above the shoulders at the opening hit, away from the net
+    - volley: within 6.9 m of the net (service line plus 0.5 m) with no bounce
+      candidate since the opponent's hit
+    - forehand/backhand: the hitting side from the incoming ball and the swing
+      direction, assuming a right-handed player
+    - unknown: anything else, including an overhead that is not an opening hit
+
+    A left-handed player's forehands and backhands come out swapped. A serve cannot
+    reveal the hand, because the toss arm is also raised. Missing bounce candidates
+    can turn a groundstroke near the net into a volley. Reviewed and manual hits are
+    never changed.
+    """
+    if detector not in STROKE_DETECTORS:
+        raise ValueError("Unsupported stroke detector version")
+    events = [deepcopy(event) for event in events]
+    rows = sorted((e for e in events if not e["excluded"]), key=lambda e: e["start"])
+    targets = [
+        e
+        for e in rows
+        if e["kind"] == "hit"
+        and e["provenance"] == "automatic"
+        and not e["reviewed"]
+        and e["player_id"] is not None
+    ]
+    samples: dict[str, list[tuple[float, dict]]] = {e["id"]: [] for e in targets}
+    first = 0
+    for frame in frames:
+        timestamp = float(frame["timestamp"])
+        while first < len(targets) and targets[first]["start"] + 0.4 < timestamp:
+            first += 1
+        for event in targets[first:]:
+            if event["start"] - 0.45 > timestamp:
+                break
+            if int(frame.get("scene", 0)) != event["scene"]:
+                continue
+            player = next(
+                (p for p in frame.get("players", []) if p["id"] == event["player_id"]), None
             )
+            sample = player and _stroke_sample(frame, player)
+            if sample:
+                samples[event["id"]].append((timestamp - event["start"], sample))
+    context = {}
+    for event in targets:
+        hits = [
+            e
+            for e in rows
+            if e["kind"] == "hit"
+            and e["scene"] == event["scene"]
+            and 0 < event["start"] - e["start"] <= rally_gap
+        ]
+        previous = hits[-1] if hits else None
+        returned = previous is not None and previous["player_id"] != event["player_id"]
+        bounced = previous is not None and any(
+            e["kind"] == "bounce"
+            and e["scene"] == event["scene"]
+            and previous["start"] < e["start"] < event["start"]
+            for e in rows
+        )
+        court = sorted(
+            s["court_y"]
+            for dt, s in samples[event["id"]]
+            if abs(dt) <= 0.15 and s["court_y"] is not None
+        )
+        net = abs(court[len(court) // 2] - NET_Y) if court else None
+        context[event["id"]] = (returned, bounced, net)
+    for event in targets:
+        returned, bounced, net = context[event["id"]]
+        if _overhead(samples[event["id"]]):
+            serve = not returned and (net is None or net >= 8.5)
+            event["stroke"] = "serve" if serve else "unknown"
+        elif returned and not bounced and net is not None and net <= 6.9:
+            event["stroke"] = "volley"
+        else:
+            event["stroke"] = None
+    for event in targets:
+        if event["stroke"] is not None:
+            continue
+        window = samples[event["id"]]
+        balls = [s["ball"] for dt, s in window if -0.25 <= dt <= 0 and s["ball"] is not None]
+        early = _mean([x for dt, s in window if -0.45 <= dt <= -0.15 for x in s["wrists"]])
+        late = _mean([x for dt, s in window if 0.1 <= dt <= 0.35 for x in s["wrists"]])
+        side = _hitting_side(
+            _mean(balls[-3:]), None if early is None or late is None else early - late
+        )
+        event["stroke"] = "forehand" if side > 0 else "backhand" if side < 0 else "unknown"
+    return events
+
+
+def candidate_events(frames_path, detector="baseline-v1", spin_detector=None, stroke_detector=None):
+    """Hit, bounce and rally candidates plus the selected opt-in stroke and spin rules."""
+
+    def frames():
+        with Path(frames_path).open() as stream:
+            yield from (json.loads(line) for line in stream if line.strip())
+
+    candidates = list(generate_candidates(frames(), detector))
+    if stroke_detector:
+        candidates = annotate_strokes(candidates, frames(), stroke_detector)
+    if spin_detector:
+        candidates = annotate_spin(candidates, frames(), spin_detector)
+    return candidates
+
+
+def regenerate_events(
+    frames_path,
+    events_path,
+    corrections_path=None,
+    detector="baseline-v1",
+    spin_detector=None,
+    stroke_detector=None,
+):
+    candidates = candidate_events(frames_path, detector, spin_detector, stroke_detector)
     corrections = (
         json.loads(Path(corrections_path).read_text())
         if corrections_path and Path(corrections_path).exists()

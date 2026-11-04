@@ -104,6 +104,11 @@ def test_spin_metrics_count_reviewed_hits_with_hit_denominator_support():
     assert rows["spin.topspin"]["value"] == 0
     assert rows["spin.topspin"]["support_refs"] == ["shot-1"]
     assert rows["stroke.forehand"]["value"] == 1
+    # The reviewed forehand slice also counts as that technique pair.
+    assert rows["technique.forehand.slice"]["value"] == 1
+    assert rows["technique.forehand.slice"]["event_ids"] == ["shot-1"]
+    assert rows["technique.backhand.slice"]["value"] == 0
+    assert rows["technique.backhand.slice"]["support_refs"] == ["shot-1"]
     # A missing spin counts as unknown; with no eligible hits every spin stays undefined.
     full = {
         row["id"]: row
@@ -114,4 +119,5 @@ def test_spin_metrics_count_reviewed_hits_with_hit_denominator_support():
     assert full["spin.unknown"]["value"] == 1
     minimal = review_report(load_evidence(root / "minimal"), view="human_verified", end=5)
     assert {r["id"]: r["value"] for r in minimal["metrics"]}["spin.slice"] is None
-    assert minimal["definition_version"] == "review-loop-v2"
+    assert {r["id"]: r["value"] for r in minimal["metrics"]}["technique.forehand.slice"] is None
+    assert minimal["definition_version"] == "review-loop-v3"
