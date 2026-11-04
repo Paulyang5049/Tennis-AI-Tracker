@@ -5,7 +5,7 @@ import json
 import math
 from collections import defaultdict
 
-from tennis_ai.events import STROKES
+from tennis_ai.events import SPINS, STROKES
 
 
 def _canonical(value):
@@ -85,6 +85,11 @@ def review_report(bundle, *, view="assisted", participant_id=None, start=0.0, en
         selected = [e for e in accepted if e["stroke"] == stroke]
         row = metric("stroke." + stroke, selected, excluded, refs=hit_denominator_refs)
         # A zero category is meaningful only when an eligible hit denominator exists.
+        row["value"] = len(selected) if accepted else None
+        metrics.append(row)
+    for spin in (*SPINS, "unknown"):
+        selected = [e for e in accepted if (e.get("spin") or "unknown") == spin]
+        row = metric("spin." + spin, selected, excluded, refs=hit_denominator_refs)
         row["value"] = len(selected) if accepted else None
         metrics.append(row)
     landing_events, points, unassigned, skipped, refs = [], [], [], {}, []
@@ -205,7 +210,7 @@ def review_report(bundle, *, view="assisted", participant_id=None, start=0.0, en
     )
     return {
         "schema_version": 1,
-        "definition_version": "review-loop-v1",
+        "definition_version": "review-loop-v2",
         "view": view,
         "participant_id": participant_id,
         "start": start,

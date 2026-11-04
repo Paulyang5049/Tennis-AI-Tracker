@@ -535,6 +535,15 @@
                     "legacy_v2",
                     null
                   ]
+                },
+                "spin": {
+                  "enum": [
+                    "topspin",
+                    "slice",
+                    "flat",
+                    "unknown",
+                    null
+                  ]
                 }
               }
             }
@@ -1003,7 +1012,10 @@
         "const": 1
       },
       "definition_version": {
-        "const": "review-loop-v1"
+        "enum": [
+          "review-loop-v1",
+          "review-loop-v2"
+        ]
       },
       "view": {
         "enum": [

@@ -272,7 +272,7 @@ def create_app(root):
 
     def event_values(folder, event_id):
         if not folder or not event_id or event_id == "new":
-            return "hit", 0, 0, 0, None, "unknown", None, None, False, False, False
+            return "hit", 0, 0, 0, None, "unknown", "unknown", None, None, False, False, False
         item = next(e for e in events_for(folder)["events"] if e["id"] == event_id)
         position = item["position"] or [None, None]
         return (
@@ -282,6 +282,7 @@ def create_app(root):
             item["scene"],
             item["player_id"],
             item["stroke"],
+            item.get("spin") or "unknown",
             *position,
             item["reviewed"],
             item["favorite"],
@@ -297,6 +298,7 @@ def create_app(root):
         scene,
         player,
         stroke,
+        spin,
         x,
         y,
         reviewed,
@@ -315,6 +317,7 @@ def create_app(root):
             "scene": int(scene),
             "player_id": int(player) if player is not None else None,
             "stroke": stroke if kind == "hit" else "unknown",
+            "spin": spin if kind == "hit" else "unknown",
             "position": position,
             "reviewed": reviewed,
             "favorite": favorite,
@@ -485,6 +488,11 @@ def create_app(root):
                             value="unknown",
                             label="Stroke type",
                         )
+                        event_spin = gr.Dropdown(
+                            ["unknown", "topspin", "slice", "flat"],
+                            value="unknown",
+                            label="Spin",
+                        )
                         landing_x = gr.Number(value=None, label="Landing x (m)")
                         landing_y = gr.Number(value=None, label="Landing y (m)")
                     with gr.Row():
@@ -504,6 +512,7 @@ def create_app(root):
                         event_scene,
                         event_player,
                         event_stroke,
+                        event_spin,
                         landing_x,
                         landing_y,
                         event_reviewed,

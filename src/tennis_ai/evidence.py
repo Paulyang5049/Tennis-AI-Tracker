@@ -473,6 +473,7 @@ def edit_evidence_event(folder, event_id, changes, *, actor="local-user", reason
             "scene",
             "player_id",
             "stroke",
+            "spin",
             "position",
             "reviewed",
             "excluded",

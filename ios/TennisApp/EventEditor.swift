@@ -22,6 +22,7 @@ struct EventEditor:View {
                 TextField("Participant ID (optional)", text: $participantID)
                 Stepper("Scene \(event.scene)", value: $event.scene, in: 0...100000)
                 if event.kind == .hit { Picker("动作",selection:$event.stroke) { ForEach(Stroke.allCases,id:\.self) { Text($0.displayName).tag($0) } } }
+                if event.kind == .hit { Picker("event.spin",selection:Binding(get:{ event.spin ?? .unknown },set:{ event.spin = $0 == .unknown ? nil : $0 })) { ForEach(Spin.allCases,id:\.self) { Text($0.displayName).tag($0) } }.accessibilityIdentifier("event.spin") }
                 if event.kind == .bounce {
                     Text("落点以双打场地米数记录，左上角为原点；无法确认时留空。")
                     TextField("横向 0–10.97 米",text:$x).keyboardType(.decimalPad)
@@ -46,7 +47,7 @@ struct EventEditor:View {
                         if !playerID.isEmpty && Int(playerID)==nil { throw PackageError.invalid("球员 ID 应为整数") }
                         event.playerId=Int(playerID)
                         event.participantId=participantID.isEmpty ? nil : participantID
-                        if event.kind != .hit { event.contactInterval=nil; event.contactPointImagePx=nil; event.hitterPositionCourtM=nil; event.stroke = .unknown }
+                        if event.kind != .hit { event.contactInterval=nil; event.contactPointImagePx=nil; event.hitterPositionCourtM=nil; event.stroke = .unknown; event.spin = nil }
                         if event.kind != .bounce { event.positionSource=nil }
                         if event.kind == .bounce && (!x.isEmpty || !y.isEmpty) {
                             guard let px=Double(x),let py=Double(y),px.isFinite,py.isFinite else { throw PackageError.invalid("请填写两个有效落点坐标") }
@@ -65,3 +66,4 @@ struct EventEditor:View {
 
 extension EventKind { var displayName:String { NSLocalizedString(self == .hit ? "击球" : self == .bounce ? "落点" : "回合", comment: "") } }
 extension Stroke { var displayName:String { NSLocalizedString("metric.stroke." + rawValue, comment: "") } }
+extension Spin { var displayName:String { NSLocalizedString("metric.spin." + rawValue, comment: "") } }
