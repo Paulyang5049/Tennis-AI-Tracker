@@ -7,6 +7,8 @@ from pathlib import Path
 from tennis_ai.artifacts import sha256
 
 COURT_COMMIT = "e5cd4f1ce26b15361700d3d89e068cbf0e82749e"
+TRACKNET_COMMIT = "730ea17a324321c553c480179caa8ff13e4cf553"
+TRACKNET_WEIGHTS = "1XEYZ4myUN7QT-NeBYJI0xteLsvs-ZAOl"
 BALL_COMMIT = "d557527793820f1e6b06872256824255facd47fd"
 
 
@@ -23,7 +25,22 @@ def download(url, destination):
         temporary.unlink(missing_ok=True)
 
 
-def setup(root, include_court=True):
+def _download_drive(file_id, path, message):
+    """Fetch a Google Drive checkpoint and verify it deserializes before keeping it."""
+    import gdown
+    import torch
+
+    part = path.with_suffix(".part")
+    try:
+        if not gdown.download(id=file_id, output=str(part), quiet=False):
+            raise RuntimeError(message)
+        torch.load(part, map_location="cpu", weights_only=True)
+        part.replace(path)
+    finally:
+        part.unlink(missing_ok=True)
+
+
+def setup(root, include_court=True, include_tracknet=False):
     from ultralytics import YOLO
     from ultralytics.utils.downloads import attempt_download_asset
 
@@ -45,26 +62,29 @@ def setup(root, include_court=True):
         )
         path = folder / "court.pt"
         if not path.exists():
-            import gdown
-
-            part = path.with_suffix(".part")
-            try:
-                result = gdown.download(
-                    id="1f-Co64ehgq4uddcQm1aFBDtbnyZhQvgG", output=str(part), quiet=False
-                )
-                if not result:
-                    raise RuntimeError(
-                        "Court download unavailable; manual calibration remains usable"
-                    )
-                import torch
-
-                torch.load(part, map_location="cpu", weights_only=True)
-                part.replace(path)
-            finally:
-                part.unlink(missing_ok=True)
+            _download_drive(
+                "1f-Co64ehgq4uddcQm1aFBDtbnyZhQvgG",
+                path,
+                "Court download unavailable; manual calibration remains usable",
+            )
         provenance["court.pt"] = {
             "sha256": sha256(path),
             "upstream_commit": COURT_COMMIT,
+            "architecture_sha256": sha256(architecture),
+        }
+    if include_tracknet:
+        # Upstream has no licence file: download for local use only, never redistribute.
+        architecture = root / "external" / "TrackNet" / "model.py"
+        download(
+            f"https://raw.githubusercontent.com/yastrebksv/TrackNet/{TRACKNET_COMMIT}/model.py",
+            architecture,
+        )
+        path = folder / "tracknet_ball.pt"
+        if not path.exists():
+            _download_drive(TRACKNET_WEIGHTS, path, "TrackNet download unavailable")
+        provenance["tracknet_ball.pt"] = {
+            "sha256": sha256(path),
+            "upstream_commit": TRACKNET_COMMIT,
             "architecture_sha256": sha256(architecture),
         }
     (folder / "provenance.json").write_text(json.dumps(provenance, indent=2))

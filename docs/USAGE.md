@@ -45,6 +45,8 @@ For a different working directory, pass `--root /absolute/path/to/AI_tennis` **b
 .venv/bin/tennis-ai evaluate outputs/my-match/frames.jsonl annotations.jsonl --output metrics.json
 ```
 
+`--ball-model tracknet-v2` replaces the single-frame sports-ball detector with an opt-in three-frame TrackNet heatmap model, which is designed for small, fast balls. Run `tennis-ai setup --with-tracknet` first; it downloads third-party code and weights without a licence for local use only (see [THIRD_PARTY.md](../THIRD_PARTY.md)). It has not been evaluated in this project.
+
 `--event-detector contact-v2` selects an experimental hit-candidate detector that tolerates frames where the ball is not observed at contact. It has not been validated against labelled contacts, so `baseline-v1` remains the default. See [VALIDATION.md](../VALIDATION.md).
 
 An analysis folder contains:
