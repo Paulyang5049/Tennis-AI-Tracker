@@ -13,9 +13,9 @@ struct LibraryMetadata:Codable { var title:String; var created:Date }
 
 /// File copy, hashing and JSONL import stay off SwiftUI's main actor.
 actor LibraryImporter {
-    func importFile(_ source:URL,package:Bool,players:Int)async throws->MatchItem {
+    func importFile(_ source:URL,package:Bool,players:Int,eventDetector:String?=nil)async throws->MatchItem {
         if package { return try LocalLibrary.importPackage(source) }
-        return try await LocalLibrary.importVideo(source,players:players)
+        return try await LocalLibrary.importVideo(source,players:players,eventDetector:eventDetector)
     }
 }
 
@@ -37,7 +37,7 @@ enum LocalLibrary {
         while let data=try handle.read(upToCount:1_048_576),!data.isEmpty { try Task.checkCancellation(); hash.update(data:data) }
         return hash.finalize().map { String(format:"%02x",$0) }.joined()
     }
-    static func importVideo(_ source:URL,players:Int)async throws->MatchItem {
+    static func importVideo(_ source:URL,players:Int,eventDetector:String?=nil)async throws->MatchItem {
         let access=source.startAccessingSecurityScopedResource(); defer { if access { source.stopAccessingSecurityScopedResource() } }
         try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true)
         let size=(try source.resourceValues(forKeys:[.fileSizeKey])).fileSize ?? 0
@@ -68,7 +68,7 @@ enum LocalLibrary {
             let origin=CMSampleBufferGetPresentationTimeStamp(sample).seconds; reader.cancelReading()
             let fps=try await track.load(.nominalFrameRate),hasAudio=try await !asset.loadTracks(withMediaType:.audio).isEmpty
             let digest=try hash(target)
-            var manifest=try Manifest(media:.init(id:digest,path:target.lastPathComponent,width:Int(width*scale),height:Int(height*scale),duration:duration,origin:origin,fps:Double(fps),hasAudio:hasAudio),settings:.init(players:players)).migratedToV3()
+            var manifest=try Manifest(media:.init(id:digest,path:target.lastPathComponent,width:Int(width*scale),height:Int(height*scale),duration:duration,origin:origin,fps:Double(fps),hasAudio:hasAudio),settings:.init(players:players,eventDetector:eventDetector)).migratedToV3()
             manifest.migration = nil
             try ContractJSON.write(manifest,to:folder.appendingPathComponent("manifest.json"))
             try ContractJSON.write(Corrections(),to:folder.appendingPathComponent("corrections.json"))

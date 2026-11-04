@@ -39,7 +39,9 @@ public struct Media: Codable, Equatable, Sendable {
 }
 public struct AnalysisSettings: Codable, Equatable, Sendable {
     public var players: Int
-    public init(players: Int = 2) { self.players = players }
+    /// nil or `baseline-v1` uses the baseline event rule; `contact-v2` opts into ContactEvents.
+    public var eventDetector: String?
+    public init(players: Int = 2, eventDetector: String? = nil) { self.players = players; self.eventDetector = eventDetector }
 }
 public enum AnalysisStatus: String, Codable, Sendable {
     case running, paused, cancelled, failed, inferenceComplete = "inference_complete", complete

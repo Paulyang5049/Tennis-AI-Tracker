@@ -60,14 +60,18 @@ actor AnalysisEngine {
                     // packages are complete and are never resumed through this engine.
                     frame.court=try corrections.latestCourt(at:frame.frame)
                     for index in frame.players.indices { frame.players[index].courtPosition = PlayerPositionEstimator.sample(player: frame.players[index], frame: frame) }
-                    events += state.temporal.consume(frame); batch.append(frame)
+                    if manifest.settings.eventDetector == ContactEvents.version {
+                        var contact = state.contact ?? ContactEvents(); events += contact.consume(frame); state.contact = contact
+                    } else { events += state.temporal.consume(frame) }
+                    batch.append(frame)
                     state.nextFrame += 1; state.lastTimestamp=time
                 }
                 if reachedEnd { break }
                 if batch.count>=60 { try LocalLibrary.checkStorage(); try commit(.running); corrections=try store.corrections(); progress(state.lastTimestamp/manifest.media.duration) }
             }
             if reader.status == .failed { throw reader.error ?? PackageError.invalid("视频解码失败") }
-            if let rally=state.temporal.finish(scene:state.scene) { events.append(rally) }
+            if var contact = state.contact { events += contact.finish(); state.contact = contact }
+            else if let rally=state.temporal.finish(scene:state.scene) { events.append(rally) }
             try commit(.complete); try store.export(to:item.folder,manifest:manifest); progress(1)
         } catch {
             try? commit(error is CancellationError || pausedForThermal ? .paused : .failed)
