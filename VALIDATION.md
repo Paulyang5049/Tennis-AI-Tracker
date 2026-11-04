@@ -73,3 +73,13 @@ Thirteen user-supplied broadcast clips (two matches, 1920×1080 at 25 fps, 3,786
 - Contacts were approximated by trajectory changes between the near and far halves of the image. `baseline-v1` placed a hit candidate within those contact windows for 28 of 78 contacts in the tuning match and 6 of 23 in the other match. For most missed contacts the ball was unobserved for at least two of the seven frames around the contact.
 - `contact-v2` (opt-in) covered 74 of 78 and 22 of 23 of the same windows, from cached frames. A visual check of 24 candidates found only by `contact-v2` judged 19 as real hits; the false ones were serve tosses at clip start and movement after a dead ball. Five of 103 consecutive hit pairs repeated the same player.
 - Contact timing was not validated; far-court contacts may be offset by 0.1–0.3 s. The near-side confirmation line was tightened after a serve-toss false positive in the tuning match; the same failure also appeared in the other match, so it is not a fully untouched test.
+
+## TrackNet ball model on the slice clips — 2026-11-04
+
+The same 13 broadcast clips were analysed with `--ball-model tracknet-v2 --event-detector contact-v2` on the Apple M4, from the project on an external drive. Results compare against the earlier default runs; no human ball labels exist, so these are development observations, not accuracy.
+
+- The ball was observed in 84.9% of 3,786 frames, against 80.0% with the default YOLO sports-ball detector. Where both observed a ball (2,768 frames), 96.9% of positions agreed within 15 pixels.
+- In a visual check of 32 random frames where only TrackNet observed a ball, about 27 showed the match ball (often a motion-blurred streak or a ball against the net or advertising boards), 2 were white shoes, 2 were balls in the crowd or out of play, and 1 was unclear.
+- `contact-v2` produced 104 hit candidates from TrackNet frames and placed a candidate within 95 of the 101 contact windows derived from the default trajectory.
+- TrackNet analysis ran at 2.8 frames per second against 7.3 for the default, because it adds a full-resolution heatmap network per frame. It stays opt-in.
+- The run exposed that Ultralytics strips apostrophes from weight paths, so a project under a folder such as "Paul's SSD" could not load any model. Weights are now passed through an apostrophe-free link.

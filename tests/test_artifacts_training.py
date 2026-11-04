@@ -77,3 +77,21 @@ def test_evaluator_does_not_count_unlabelled_as_negative(tmp_path):
     assert metrics["ball_recall"] == metrics["ball_precision"] == 1
     assert metrics["racket_recall"] is None
     assert metrics["player_id_switches"] is None
+
+
+def test_weight_paths_with_apostrophes_reach_ultralytics_unchanged(tmp_path):
+    from ultralytics.utils.downloads import attempt_download_asset
+
+    from tennis_ai.artifacts import ultralytics_path
+
+    folder = tmp_path / "Paul's SSD"
+    folder.mkdir()
+    weights = folder / "yolo26s.pt"
+    weights.write_bytes(b"weights")
+    plain = tmp_path / "plain.pt"
+    assert ultralytics_path(plain) == str(plain)
+    safe = ultralytics_path(weights)
+    assert "'" not in safe and Path(safe).read_bytes() == b"weights"
+    # Ultralytics returns an existing local file as is, instead of trying to download it.
+    assert attempt_download_asset(safe) == safe
+    assert ultralytics_path(weights) == safe

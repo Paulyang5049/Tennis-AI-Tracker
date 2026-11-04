@@ -105,6 +105,11 @@
 "metric.stroke.volley" = "截击";
 "metric.stroke.overhead" = "高压";
 "metric.stroke.unknown" = "动作未知";
+"metric.spin.topspin" = "上旋";
+"metric.spin.slice" = "切削";
+"metric.spin.flat" = "平击";
+"metric.spin.unknown" = "旋转未知";
+"event.spin" = "旋转";
 "metric.landings" = "落点分布";
 "metric.unassigned_landings" = "未归属落点";
 "metric.rally_length" = "已复核回合平均击球数";

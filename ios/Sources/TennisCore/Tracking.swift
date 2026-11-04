@@ -156,10 +156,123 @@ public struct TemporalEvents: Codable, Equatable, Sendable {
         hypot(max(b[0]-p[0],0,p[0]-b[2]),max(b[1]-p[1],0,p[1]-b[3]))
     }
 }
+/// Opt-in, gap-tolerant hit candidates; mirrors Python's `contact-v2` and is not validated
+/// against labelled contacts. A visit is a run of observed samples inside one player's hitting
+/// region, tolerating gaps up to `maxGap`; it becomes a hit only when a later observed sample
+/// crosses the line between the players in the outgoing direction. Interpolated samples are
+/// never used. Bounces still come from the baseline turn rule.
+public struct ContactEvents: Codable, Equatable, Sendable {
+    public static let version = "contact-v2"
+    struct Sample: Codable, Equatable, Sendable { var time: Double; var frame: Int; var xy: [Double]; var distance = 0.0 }
+    struct Visit: Codable, Equatable, Sendable { var player: Int; var near: Bool; var line: Double; var samples: [Sample] }
+    struct Rally: Codable, Equatable, Sendable { var start: Double; var end: Double; var scene: Int; var frame: Int; var hits = 0 }
+    var maxGap = 0.4, departure = 1.2, cooldown = 0.35, rallyGap = 2.0
+    var bounces = TemporalEvents()
+    var visit: Visit?; var pending: [Visit] = []; var hitTimes: [Double] = []
+    var rally: Rally?; var scene: Int?; var lastObserved: Double?
+    public init() {}
+
+    public mutating func consume(_ frame: FrameRecord) -> [AnalysisEvent] {
+        var result = bounces.consume(frame).filter { $0.kind == .bounce }
+        if scene != frame.scene || frame.cut || frame.cameraMoving {
+            result += closeRally(); visit = nil; pending = []; lastObserved = nil
+        }
+        scene = frame.scene
+        if let r = rally, frame.timestamp - r.end > rallyGap { result += closeRally() }
+        guard frame.ball.status == .observed, let xy = frame.ball.xy, !frame.cameraMoving else { return result }
+        if let last = lastObserved, frame.timestamp - last > maxGap { closeVisit() }
+        lastObserved = frame.timestamp
+        rally?.end = frame.timestamp
+        let found = owner(xy, Array(frame.players.prefix(4)))
+        let sample = Sample(time: frame.timestamp, frame: frame.frame, xy: xy)
+        if found == nil || (visit != nil && visit?.player != found?.player) { closeVisit() }
+        result += confirm(sample, scene: frame.scene)
+        if let found {
+            if visit == nil { visit = Visit(player: found.player, near: found.near, line: found.line, samples: []) }
+            // Bound a long visit, such as a ball held before a serve.
+            var kept = Array(visit!.samples.suffix(39)); var owned = sample; owned.distance = found.distance
+            kept.append(owned); visit!.samples = kept
+        }
+        return result
+    }
+
+    public mutating func finish() -> [AnalysisEvent] { closeRally() }
+
+    private mutating func closeVisit() {
+        if let v = visit, v.samples.count >= 2 {
+            // A later visit by the same player supersedes an unconfirmed one (a pre-serve bounce or toss).
+            pending.removeAll { $0.player == v.player }; pending.append(v)
+        }
+        visit = nil
+    }
+
+    private mutating func confirm(_ sample: Sample, scene: Int) -> [AnalysisEvent] {
+        var result = [AnalysisEvent](), remaining = [Visit]()
+        for v in pending {
+            let y = sample.xy[1]
+            if v.near ? y <= v.line : y >= v.line { result += hit(v, departure: sample, scene: scene) }
+            else if sample.time - (v.samples.last?.time ?? sample.time) <= departure { remaining.append(v) }
+        }
+        pending = remaining
+        return result
+    }
+
+    private mutating func hit(_ v: Visit, departure sample: Sample, scene: Int) -> [AnalysisEvent] {
+        guard let lastTime = v.samples.last?.time else { return [] }
+        let offset = v.samples.firstIndex { lastTime - $0.time <= 0.6 } ?? 0
+        let recent = v.samples[offset...]
+        guard let closest = recent.min(by: { $0.distance < $1.distance }),
+              let index = v.samples.firstIndex(of: closest) else { return [] }
+        let following = index + 1 < v.samples.count ? v.samples[index + 1] : sample
+        var time = closest.time
+        // Contact fell inside unobserved frames; both bounds are observations.
+        if following.time - time > 0.07 { time = (time + following.time) / 2 }
+        if hitTimes.contains(where: { abs(time - $0) < cooldown }) { return [] }
+        hitTimes = Array((hitTimes + [time]).suffix(4))
+        if rally == nil { rally = Rally(start: time, end: sample.time, scene: scene, frame: closest.frame) }
+        rally?.hits += 1
+        var event = AnalysisEvent(id: "hit-\(scene)-\(closest.frame)", kind: .hit, start: time)
+        event.scene = scene; event.playerId = v.player; event.provenance = "automatic"; event.reviewed = false
+        return [event]
+    }
+
+    private mutating func closeRally() -> [AnalysisEvent] {
+        defer { rally = nil }
+        guard let r = rally, r.hits >= 2 else { return [] }
+        var event = AnalysisEvent(id: "rally-\(r.scene)-\(r.frame)", kind: .rally, start: max(0, r.start - 0.5), end: r.end)
+        event.scene = r.scene; event.provenance = "automatic"; event.reviewed = false
+        return [event]
+    }
+
+    /// Nearest player whose hitting region holds the ball, with the side split line.
+    private func owner(_ point: [Double], _ players: [Player]) -> (player: Int, near: Bool, line: Double, distance: Double)? {
+        let bottoms = players.map { $0.box[3] }.sorted()
+        var best: (Double, Player)?
+        for player in players { if let d = Self.reach(point, player), best == nil || d < best!.0 { best = (d, player) } }
+        guard let (distance, player) = best, let far = bottoms.first, let near = bottoms.last, bottoms.count >= 2, near - far >= 1 else { return nil }
+        let isNear = player.box[3] >= (far + near) / 2
+        // In a fixed full-court view the net lies about a fifth of the feet span below the far player.
+        return (player.id, isNear, far + (isNear ? 0.2 : 0.35) * (near - far), distance)
+    }
+
+    /// Normalized distance to a player's wrists, or nil outside the hitting region.
+    static func reach(_ point: [Double], _ player: Player) -> Double? {
+        let b = player.box, height = max(1, b[3] - b[1]), x = point[0], y = point[1]
+        guard b[0] - 0.6 * height <= x, x <= b[2] + 0.6 * height, b[1] - 0.5 * height <= y, y <= b[3] else { return nil }
+        let pose = player.pose ?? []
+        let joints = (9...10).compactMap { i -> [Double]? in
+            i < pose.count && pose[i].count == 3 && pose[i][2] >= 0.3 ? Array(pose[i][0..<2]) : nil
+        }
+        let anchors = joints.isEmpty ? [[(b[0] + b[2]) / 2, b[1] + 0.4 * height]] : joints
+        return anchors.map { hypot(x - $0[0], y - $0[1]) }.min()! / height
+    }
+}
 public struct RuntimeState: Codable, Equatable, Sendable {
     public var nextFrame = 0; public var lastTimestamp: Double = -1
     public var ball=BallTracker(); public var players=PlayerTracker(); public var temporal=TemporalEvents()
     public var scene=0
+    /// Present only for analyses that opted into `contact-v2`; older checkpoints decode as nil.
+    public var contact: ContactEvents?
     public init() {}
 }
 public struct ResumeIdentity: Codable, Equatable, Sendable {

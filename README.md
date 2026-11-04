@@ -44,12 +44,12 @@
 | Capability | Status |
 |---|---|
 | Player detection, tracking and body pose (singles and doubles) | ✅ Works. IDs can still switch after long occlusions |
-| Ball detection with a short trail | ✅ Works. Tiny far-court balls and spare balls remain hard |
+| Ball detection with a short trail | ✅ Works. Tiny far-court balls remain hard; try the opt-in TrackNet model (`--ball-model tracknet-v2`) |
 | Court keypoints and a live mini-court | ✅ Works, with four-corner manual calibration as a fallback |
 | Synchronized replay, exact-frame review and clip export with audio | ✅ Works |
 | Pause and resume long analyses; portable analysis folders | ✅ Works |
 | Hit, bounce and rally candidates | 🧪 Experimental. Review before they count; try `--event-detector contact-v2` |
-| Stroke type (serve, forehand, backhand, volley, overhead) | ✍️ Manual labels today; automatic classification is planned |
+| Stroke type (serve, forehand, backhand, volley, overhead) and spin (topspin, slice, flat) | ✍️ Manual labels; 🧪 opt-in slice/topspin candidates with `--spin-detector wrist-v1` |
 | Native iPhone app (SwiftUI, AVFoundation, Core ML) | 🧪 Developer build from source; not on the App Store |
 | Accuracy on labelled phone footage | 🔜 Waiting for labelled matches. [Help wanted](#help-build-it) |
 
@@ -97,9 +97,10 @@ Everything is written to a self-contained analysis folder with versioned [data c
 - [x] Portable analysis packages, resume after interruption, clip export with audio
 - [x] Shared Python/Swift data contracts and a native iOS developer build
 - [x] Gap-tolerant hit candidates (`contact-v2`, experimental)
-- [ ] Validate contact detection on human-labelled clips
-- [ ] Spin and technique labels (topspin, slice, flat)
-- [ ] Multi-frame ball detector for small, fast far-court balls
+- [ ] Validate contact and spin candidates on human-labelled clips
+- [x] Spin labels (topspin, slice, flat) in both apps, with experimental wrist-based candidates
+- [x] Multi-frame TrackNet ball detector (opt-in, experimental)
+- [x] Gap-tolerant hit candidates on iPhone as well as desktop
 - [ ] Labelled phone-footage benchmark, singles first
 - [ ] TestFlight beta
 

@@ -18,6 +18,11 @@ def main():
     app.add_argument("--port", type=int, default=7860)
     setup_parser = commands.add_parser("setup")
     setup_parser.add_argument("--without-court", action="store_true")
+    setup_parser.add_argument(
+        "--with-tracknet",
+        action="store_true",
+        help="Also download the unlicensed TrackNet ball weights for local, opt-in use",
+    )
     analysis = commands.add_parser("analyze")
     analysis.add_argument("video")
     analysis.add_argument("--output", required=True)
@@ -32,10 +37,27 @@ def main():
         "--overlay-masks", help="JSON list of normalized overlay boxes; experimental tracker only"
     )
     analysis.add_argument(
+        "--ball-model",
+        choices=["yolo-coco", "tracknet-v2"],
+        default="yolo-coco",
+        help="tracknet-v2 is an unvalidated three-frame heatmap detector; needs setup --with-tracknet",
+    )
+    analysis.add_argument(
+        "--pose-stride",
+        type=int,
+        default=1,
+        help="Run pose and player-crop passes every N frames (and near contacts); default 1",
+    )
+    analysis.add_argument(
         "--event-detector",
         choices=["baseline-v1", "contact-v2"],
         default="baseline-v1",
         help="contact-v2 is an unvalidated gap-tolerant hit candidate experiment",
+    )
+    analysis.add_argument(
+        "--spin-detector",
+        choices=["wrist-v1"],
+        help="Unvalidated spin candidates (slice/topspin) for automatic hits",
     )
     resume = commands.add_parser("resume", help="Continue an interrupted analysis")
     resume.add_argument("output")
@@ -100,7 +122,9 @@ def main():
         elif args.command == "setup":
             from tennis_ai.setup import setup
 
-            print(json.dumps(setup(args.root, not args.without_court), indent=2))
+            print(
+                json.dumps(setup(args.root, not args.without_court, args.with_tracknet), indent=2)
+            )
         elif args.command == "analyze":
             analyze(
                 args.video,
@@ -114,6 +138,10 @@ def main():
                     args.ball_tracker,
                     json.loads(Path(args.overlay_masks).read_text()) if args.overlay_masks else [],
                     args.event_detector,
+                    # Later fields by name, so independently added options cannot shift.
+                    spin_detector=args.spin_detector,
+                    ball_model=args.ball_model,
+                    pose_stride=args.pose_stride,
                 ),
                 cancel,
                 lambda f, m: print(f"{f:.0%}: {m}", flush=True),

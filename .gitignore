@@ -26,3 +26,16 @@ ios/DerivedData/
 xcuserdata/
 mobile-toolchain/.venv*/
 mobile-toolchain/exports/
+
+# Raw agent review dumps belong in CI artifacts or .context/; keep only short receipts
+docs/reviews/**/full.diff
+docs/reviews/**/raw-returns.json
+docs/reviews/**/validator-input.json
+
+# Release wheels are attached to GitHub releases, not committed
+colab_delivery/*.whl
+
+# Local footage and working folders at the repository root stay private
+/points/
+/*.mp4
+/*.mov

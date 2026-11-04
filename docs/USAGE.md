@@ -45,6 +45,8 @@ For a different working directory, pass `--root /absolute/path/to/AI_tennis` **b
 .venv/bin/tennis-ai evaluate outputs/my-match/frames.jsonl annotations.jsonl --output metrics.json
 ```
 
+`--ball-model tracknet-v2` replaces the single-frame sports-ball detector with an opt-in three-frame TrackNet heatmap model, which is designed for small, fast balls. Run `tennis-ai setup --with-tracknet` first; it downloads third-party code and weights without a licence for local use only (see [THIRD_PARTY.md](../THIRD_PARTY.md)). It has not been evaluated in this project.
+
 `--event-detector contact-v2` selects an experimental hit-candidate detector that tolerates frames where the ball is not observed at contact. It has not been validated against labelled contacts, so `baseline-v1` remains the default. See [VALIDATION.md](../VALIDATION.md).
 
 An analysis folder contains:
@@ -103,6 +105,24 @@ Coverage is *not* accuracy. No accuracy metric is fabricated from confidence sco
 Omit unlabelled fields. `"ball": null` means a confirmed absence. `court`, when supplied, is 14 `[x,y]` points or null entries in upstream order. Record ground-truth player identities consistently across a scene. Use categories such as `phone-singles`, `phone-doubles`, `broadcast-singles`, `broadcast-doubles` and run each clip separately.
 
 The evaluator reports observed-ball precision/recall at a configurable pixel tolerance (default 6 px; scale for your resolution), racket recall at IoU 0.5, matched-player ID switches, and median court-point error. Pair these with coverage and runtime from the run summary. Missing annotation fields produce null metrics. Sparse annotations can undercount ID switches. Test separate phone/broadcast clips with occlusions, far-court balls, spare balls, spectators and camera cuts. Promote a ball candidate only when held-out observed coverage improves without more false detections. The match-level protocol is in [EVALUATION_PROTOCOL.md](EVALUATION_PROTOCOL.md).
+
+## Label contacts and spin on your own clips
+
+A quick way to measure hit and spin candidates on your own short clips. Analyze each clip into a folder named after the clip, then write a blank sheet:
+
+```sh
+.venv/bin/python scripts/contact_labels.py template labels.csv 1 2 3
+```
+
+Watch each clip **without the overlays** and add one row per racket contact: `clip`, `time_s` (contact time in seconds), `side` (`near` or `far`), `spin` (`topspin`, `slice`, `flat` or blank) and an optional note. Every listed clip is treated as fully labelled, so a clip with no rows has no hits. Then score the cached analyses:
+
+```sh
+.venv/bin/python scripts/contact_labels.py score labels.csv outputs --spin-detector wrist-v1
+```
+
+The report gives hit precision and recall at 0.1 s and 0.2 s for `baseline-v1` and `contact-v2`, and how often `wrist-v1` spin candidates agree with your labelled spins on matched hits (`correct`, `wrong` or `abstained`). This is a development check on your clips, not the frozen match-level benchmark in [EVALUATION_PROTOCOL.md](EVALUATION_PROTOCOL.md).
+
+`--spin-detector wrist-v1` on `analyze` adds the same unvalidated spin candidates to automatic hits. It reads the hitter's wrist height relative to the shoulder line around contact: high to low suggests slice, low to high topspin. Serves, overheads and unclear swings stay `unknown`, and reviewed or manual hits are never changed.
 
 ## Checks
 

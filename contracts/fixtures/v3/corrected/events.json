@@ -26,7 +26,8 @@
         2
       ],
       "field_confidence": {},
-      "position_source": null
+      "position_source": null,
+      "spin": "slice"
     },
     {
       "id": "bounce-1",

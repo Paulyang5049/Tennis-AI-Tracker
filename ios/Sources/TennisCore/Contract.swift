@@ -39,7 +39,9 @@ public struct Media: Codable, Equatable, Sendable {
 }
 public struct AnalysisSettings: Codable, Equatable, Sendable {
     public var players: Int
-    public init(players: Int = 2) { self.players = players }
+    /// nil or `baseline-v1` uses the baseline event rule; `contact-v2` opts into ContactEvents.
+    public var eventDetector: String?
+    public init(players: Int = 2, eventDetector: String? = nil) { self.players = players; self.eventDetector = eventDetector }
 }
 public enum AnalysisStatus: String, Codable, Sendable {
     case running, paused, cancelled, failed, inferenceComplete = "inference_complete", complete
@@ -129,6 +131,8 @@ public struct FrameRecord: Codable, Equatable, Sendable {
 }
 public enum EventKind: String, Codable, CaseIterable, Sendable { case hit, bounce, rally }
 public enum Stroke: String, Codable, CaseIterable, Sendable { case serve, forehand, backhand, volley, overhead, unknown }
+/// Spin is a technique attribute of any stroke, so a slice forehand stays a forehand.
+public enum Spin: String, Codable, CaseIterable, Sendable { case topspin, slice, flat, unknown }
 public struct AnalysisEvent: Codable, Equatable, Identifiable, Sendable {
     public var id: String; public var kind: EventKind; public var start: Double; public var end: Double
     public var scene: Int = 0; public var playerId: Int?; public var stroke: Stroke = .unknown
@@ -140,6 +144,8 @@ public struct AnalysisEvent: Codable, Equatable, Identifiable, Sendable {
     public var hitterPositionCourtM: [Double]?
     public var fieldConfidence: [String: Double?]?
     public var positionSource: String?
+    /// Optional in v3; absent means unknown, and older packages omit it.
+    public var spin: Spin?
     public init(id: String = UUID().uuidString, kind: EventKind, start: Double, end: Double? = nil) {
         self.id = id; self.kind = kind; self.start = start; self.end = end ?? start
     }

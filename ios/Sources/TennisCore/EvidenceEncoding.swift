@@ -4,7 +4,7 @@ import Foundation
 // default encodeIfPresent would silently omit these required nullable fields.
 
 extension AnalysisEvent {
-    enum CodingKeys: String, CodingKey { case id, kind, start, end, scene, playerId, stroke, position, provenance, reviewed, confidence, excluded, favorite, participantId, contactInterval, contactPointImagePx, hitterPositionCourtM, fieldConfidence, positionSource }
+    enum CodingKeys: String, CodingKey { case id, kind, start, end, scene, playerId, stroke, position, provenance, reviewed, confidence, excluded, favorite, participantId, contactInterval, contactPointImagePx, hitterPositionCourtM, fieldConfidence, positionSource, spin }
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
@@ -26,6 +26,7 @@ extension AnalysisEvent {
         try container.encodeIfPresent(hitterPositionCourtM, forKey: .hitterPositionCourtM)
         try container.encodeIfPresent(fieldConfidence, forKey: .fieldConfidence)
         try container.encodeIfPresent(positionSource, forKey: .positionSource)
+        try container.encodeIfPresent(spin, forKey: .spin)
     }
 }
 

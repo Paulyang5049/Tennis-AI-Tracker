@@ -82,7 +82,18 @@ def create_app(root):
     jobs: dict[str, dict[str, Any]] = {}
     worker_lock = threading.Lock()
 
-    def start(video, mode, device, ball, court, current=None, overlays=None, resume=False):
+    def start(
+        video,
+        mode,
+        device,
+        ball,
+        court,
+        current=None,
+        overlays=None,
+        resume=False,
+        ball_tracker="baseline-v1",
+        event_detector="baseline-v1",
+    ):
         if not current and not video:
             raise gr.Error("Choose a recording before starting analysis.")
         if not worker_lock.acquire(blocking=False):
@@ -120,6 +131,8 @@ def create_app(root):
                             device,
                             (ball or "").strip() or None,
                             (court or "").strip() or None,
+                            ball_tracker=ball_tracker,
+                            event_detector=event_detector,
                         ),
                         job["cancel"],
                         update,
@@ -272,7 +285,7 @@ def create_app(root):
 
     def event_values(folder, event_id):
         if not folder or not event_id or event_id == "new":
-            return "hit", 0, 0, 0, None, "unknown", None, None, False, False, False
+            return "hit", 0, 0, 0, None, "unknown", "unknown", None, None, False, False, False
         item = next(e for e in events_for(folder)["events"] if e["id"] == event_id)
         position = item["position"] or [None, None]
         return (
@@ -282,6 +295,7 @@ def create_app(root):
             item["scene"],
             item["player_id"],
             item["stroke"],
+            item.get("spin") or "unknown",
             *position,
             item["reviewed"],
             item["favorite"],
@@ -297,6 +311,7 @@ def create_app(root):
         scene,
         player,
         stroke,
+        spin,
         x,
         y,
         reviewed,
@@ -315,6 +330,7 @@ def create_app(root):
             "scene": int(scene),
             "player_id": int(player) if player is not None else None,
             "stroke": stroke if kind == "hit" else "unknown",
+            "spin": spin if kind == "hit" else "unknown",
             "position": position,
             "reviewed": reviewed,
             "favorite": favorite,
@@ -485,6 +501,11 @@ def create_app(root):
                             value="unknown",
                             label="Stroke type",
                         )
+                        event_spin = gr.Dropdown(
+                            ["unknown", "topspin", "slice", "flat"],
+                            value="unknown",
+                            label="Spin",
+                        )
                         landing_x = gr.Number(value=None, label="Landing x (m)")
                         landing_y = gr.Number(value=None, label="Landing y (m)")
                     with gr.Row():
@@ -504,6 +525,7 @@ def create_app(root):
                         event_scene,
                         event_player,
                         event_stroke,
+                        event_spin,
                         landing_x,
                         landing_y,
                         event_reviewed,
@@ -600,6 +622,19 @@ def create_app(root):
                     device = gr.Dropdown(
                         ["auto", "mps", "cpu", "cuda"], value="auto", label="Processing device"
                     )
+                    ball_tracker = gr.Dropdown(
+                        ["baseline-v1", "experimental-motion-v1"],
+                        value="baseline-v1",
+                        label="Ball tracker",
+                        info="experimental-motion-v1 is experimental and unvalidated",
+                    )
+                    event_detector = gr.Dropdown(
+                        ["baseline-v1", "contact-v2"],
+                        value="baseline-v1",
+                        label="Hit candidate detector",
+                        info="contact-v2 tolerates missing ball frames at contact; "
+                        "experimental and unvalidated",
+                    )
                 with gr.Accordion("Custom Colab model bundles", open=False):
                     ball = gr.Textbox(
                         label="Local ball bundle folder",
@@ -634,7 +669,11 @@ def create_app(root):
             saved_runs,
             [job_state, status],
         )
-        run.click(start, [video, mode, device, ball, court], [job_state, status])
+        run.click(
+            lambda v, m, d, b, c, t, e: start(v, m, d, b, c, ball_tracker=t, event_detector=e),
+            [video, mode, device, ball, court, ball_tracker, event_detector],
+            [job_state, status],
+        )
         stop.click(cancel, job_state, status, queue=False)
         timer: Any = gr.Timer(1)
         timer.tick(

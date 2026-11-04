@@ -1,0 +1,30 @@
+[
+  {
+    "id": "hit-0-8",
+    "kind": "hit",
+    "start": 0.416667,
+    "end": 0.416667,
+    "player_id": 1
+  },
+  {
+    "id": "hit-0-73",
+    "kind": "hit",
+    "start": 2.433333,
+    "end": 2.433333,
+    "player_id": 1
+  },
+  {
+    "id": "hit-0-124",
+    "kind": "hit",
+    "start": 4.133333,
+    "end": 4.133333,
+    "player_id": 2
+  },
+  {
+    "id": "rally-0-8",
+    "kind": "rally",
+    "start": 0.0,
+    "end": 6.066667,
+    "player_id": null
+  }
+]

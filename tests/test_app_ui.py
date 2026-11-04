@@ -1,4 +1,17 @@
+import gradio as gr
+
+from tennis_ai.app import create_app
 from tennis_ai.ui import progress_card, status_card
+
+
+def test_experimental_processing_options_default_to_baselines(tmp_path):
+    app = create_app(tmp_path)
+    dropdowns = {
+        block.label: block for block in app.blocks.values() if isinstance(block, gr.Dropdown)
+    }
+    assert dropdowns["Ball tracker"].value == "baseline-v1"
+    assert dropdowns["Hit candidate detector"].value == "baseline-v1"
+    assert ("contact-v2", "contact-v2") in dropdowns["Hit candidate detector"].choices
 
 
 def test_progress_escapes_untrusted_status_and_never_uses_simulated_progress():

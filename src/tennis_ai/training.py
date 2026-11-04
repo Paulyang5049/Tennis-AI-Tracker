@@ -12,7 +12,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-from tennis_ai.artifacts import package, sha256
+from tennis_ai.artifacts import package, sha256, ultralytics_path
 from tennis_ai.geometry import iou
 from tennis_ai.setup import BALL_COMMIT, COURT_COMMIT, download
 
@@ -169,7 +169,7 @@ def detection_counts(predictions, truth, threshold=0.5):
 def evaluate_ball_images(weights, data, split, baseline=False, device=0):
     from ultralytics import YOLO
 
-    model: Any = YOLO(str(weights))
+    model: Any = YOLO(ultralytics_path(weights))
     tp = fp = fn = 0
     for image in sorted((Path(data) / split / "images").glob("*")):
         pixels = cv2.imread(str(image))
@@ -226,7 +226,7 @@ def train_ball(data_yaml, local_runs, drive_runs, resume=None, smoke=False):
                 shutil.copy2(source, drive_runs / name)
 
     for batch in [4, 2, 1]:
-        model: Any = YOLO(str(resume) if resume else "yolo26s.pt")
+        model: Any = YOLO(ultralytics_path(resume) if resume else "yolo26s.pt")
         if not smoke:
             model.add_callback("on_model_save", persist)
         try:

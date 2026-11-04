@@ -40,7 +40,7 @@ public struct ReviewMetric: Codable, Equatable, Identifiable, Sendable {
 
 /// Calculated from one snapshot. Never uses a stored derived metric as current truth.
 public struct ReviewReport: Codable, Equatable, Sendable {
-    public var schemaVersion = 1; public var definitionVersion = "review-loop-v1"
+    public var schemaVersion = 1; public var definitionVersion = "review-loop-v2"
     public var view: EvidenceView; public var participantId: String?; public var start: Double; public var end: Double
     public var inputDigest: String; public var metrics: [ReviewMetric]
     enum CodingKeys: String, CodingKey { case schemaVersion, definitionVersion, view, participantId, start, end, inputDigest, metrics }
@@ -87,6 +87,11 @@ public struct ReviewReport: Codable, Equatable, Sendable {
         for stroke in Stroke.allCases {
             let selected = accepted.filter { $0.stroke == stroke }
             var row = metric("stroke." + stroke.rawValue, selected, excluded, refs: hitDenominatorRefs)
+            row.value = accepted.isEmpty ? nil : Double(selected.count); metrics.append(row)
+        }
+        for spin in Spin.allCases {
+            let selected = accepted.filter { ($0.spin ?? .unknown) == spin }
+            var row = metric("spin." + spin.rawValue, selected, excluded, refs: hitDenominatorRefs)
             row.value = accepted.isEmpty ? nil : Double(selected.count); metrics.append(row)
         }
         var landings: [AnalysisEvent] = [], points: [ReviewPoint] = [], unassigned: [ReviewPoint] = [], skipped: [String: String] = [:], refs: [String] = []
