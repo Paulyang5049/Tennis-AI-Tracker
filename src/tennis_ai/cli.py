@@ -37,6 +37,11 @@ def main():
         default="baseline-v1",
         help="contact-v2 is an unvalidated gap-tolerant hit candidate experiment",
     )
+    analysis.add_argument(
+        "--spin-detector",
+        choices=["wrist-v1"],
+        help="Unvalidated spin candidates (slice/topspin) for automatic hits",
+    )
     resume = commands.add_parser("resume", help="Continue an interrupted analysis")
     resume.add_argument("output")
     render = commands.add_parser("render")
@@ -114,6 +119,8 @@ def main():
                     args.ball_tracker,
                     json.loads(Path(args.overlay_masks).read_text()) if args.overlay_masks else [],
                     args.event_detector,
+                    # Later fields by name, so independently added options cannot shift.
+                    spin_detector=args.spin_detector,
                 ),
                 cancel,
                 lambda f, m: print(f"{f:.0%}: {m}", flush=True),

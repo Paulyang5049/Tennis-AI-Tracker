@@ -10,7 +10,7 @@ from pathlib import Path
 
 from tennis_ai import jobs
 from tennis_ai.artifacts import sha256
-from tennis_ai.events import create_event_detector
+from tennis_ai.events import SPIN_DETECTORS, create_event_detector
 from tennis_ai.geometry import associate_rackets, attach_poses, calibrate, ground_point, project
 from tennis_ai.models import Models
 from tennis_ai.package import (
@@ -36,6 +36,7 @@ class Settings:
     ball_tracker: str = "baseline-v1"
     overlay_masks: list[list[float]] = field(default_factory=list)
     event_detector: str = "baseline-v1"
+    spin_detector: str | None = None
 
     def __post_init__(self):
         if self.players not in (2, 4):
@@ -44,6 +45,8 @@ class Settings:
             raise ValueError("Unknown inference device")
         create_ball_tracker(self.ball_tracker, self.overlay_masks)
         create_event_detector(self.event_detector)
+        if self.spin_detector not in (None, *SPIN_DETECTORS):
+            raise ValueError("Unsupported spin detector version")
 
 
 def connect(folder):
@@ -161,7 +164,9 @@ def _analyze(
     provenance = fingerprints(root, settings, model_factory)
     # Event candidates are derived after inference, so the detector choice does not
     # invalidate cached predictions or block resuming an older interrupted run.
-    inference_settings = {k: v for k, v in asdict(settings).items() if k != "event_detector"}
+    inference_settings = {
+        k: v for k, v in asdict(settings).items() if k not in ("event_detector", "spin_detector")
+    }
     identity = {
         "source_sha256": sha256(source),
         "settings": inference_settings,
@@ -469,6 +474,7 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
         from tennis_ai.events import regenerate_events
 
         detector = summary["settings"].get("event_detector", "baseline-v1")
+        spin_detector = summary["settings"].get("spin_detector")
         if manifest and manifest["schema_version"] == 3:
             from tennis_ai.events import generate_candidates
             from tennis_ai.evidence import load_evidence, persist_frame_tracks, validate_evidence
@@ -486,6 +492,15 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
                             (json.loads(line) for line in stream if line.strip()), detector
                         )
                     )
+                if spin_detector:
+                    from tennis_ai.events import annotate_spin
+
+                    with relative_asset(output, artifacts["frames"]).open() as stream:
+                        bundle["events"]["events"] = annotate_spin(
+                            bundle["events"]["events"],
+                            (json.loads(line) for line in stream if line.strip()),
+                            spin_detector,
+                        )
                 validate_evidence(bundle, manifest["media"]["duration"])
                 atomic_json(relative_asset(output, artifacts["events"]), bundle["events"])
             with relative_asset(output, artifacts["frames"]).open() as stream:
@@ -498,6 +513,7 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
                 relative_asset(output, artifacts["events"]),
                 corrections_path,
                 detector,
+                spin_detector,
             )
         with relative_asset(output, artifacts["frames"]).open() as stream:
             summary["capture_quality"] = summarize_quality(
