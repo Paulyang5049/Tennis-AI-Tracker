@@ -49,7 +49,7 @@
 | Synchronized replay, exact-frame review and clip export with audio | ✅ Works |
 | Pause and resume long analyses; portable analysis folders | ✅ Works |
 | Hit, bounce and rally candidates | 🧪 Experimental. Review before they count; try `--event-detector contact-v2` |
-| Stroke type (serve, forehand, backhand, volley, overhead) and spin (topspin, slice, flat) | ✍️ Manual labels; 🧪 opt-in slice/topspin candidates with `--spin-detector wrist-v1` |
+| Stroke type (serve, forehand, backhand, volley, overhead) and spin (topspin, slice, flat) | ✍️ Manual labels; 🧪 opt-in candidates: `--stroke-detector stroke-v1` (serve, forehand, backhand, volley) and `--spin-detector wrist-v1` (slice/topspin) |
 | Native iPhone app (SwiftUI, AVFoundation, Core ML) | 🧪 Developer build from source; not on the App Store |
 | Accuracy on labelled phone footage | 🔜 Waiting for labelled matches. [Help wanted](#help-build-it) |
 
@@ -97,8 +97,9 @@ Everything is written to a self-contained analysis folder with versioned [data c
 - [x] Portable analysis packages, resume after interruption, clip export with audio
 - [x] Shared Python/Swift data contracts and a native iOS developer build
 - [x] Gap-tolerant hit candidates (`contact-v2`, experimental)
-- [ ] Validate contact and spin candidates on human-labelled clips
+- [ ] Validate contact, stroke and spin candidates on human-labelled clips
 - [x] Spin labels (topspin, slice, flat) in both apps, with experimental wrist-based candidates
+- [x] Stroke-type candidates (serve, forehand, backhand, volley) and forehand/backhand × spin report counts (experimental)
 - [x] Multi-frame TrackNet ball detector (opt-in, experimental)
 - [x] Gap-tolerant hit candidates on iPhone as well as desktop
 - [ ] Labelled phone-footage benchmark, singles first

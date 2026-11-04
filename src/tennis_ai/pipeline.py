@@ -10,7 +10,7 @@ from pathlib import Path
 
 from tennis_ai import jobs
 from tennis_ai.artifacts import sha256
-from tennis_ai.events import SPIN_DETECTORS, create_event_detector
+from tennis_ai.events import SPIN_DETECTORS, STROKE_DETECTORS, create_event_detector
 from tennis_ai.geometry import associate_rackets, attach_poses, calibrate, ground_point, project
 from tennis_ai.models import BALL_MODELS, Models
 from tennis_ai.package import (
@@ -39,6 +39,7 @@ class Settings:
     spin_detector: str | None = None
     ball_model: str = "yolo-coco"
     pose_stride: int = 1
+    stroke_detector: str | None = None
 
     def __post_init__(self):
         if self.players not in (2, 4):
@@ -49,6 +50,8 @@ class Settings:
         create_event_detector(self.event_detector)
         if self.spin_detector not in (None, *SPIN_DETECTORS):
             raise ValueError("Unsupported spin detector version")
+        if self.stroke_detector not in (None, *STROKE_DETECTORS):
+            raise ValueError("Unsupported stroke detector version")
         if self.ball_model not in BALL_MODELS:
             raise ValueError("Unsupported ball model")
         if self.ball_model != "yolo-coco" and self.ball_bundle:
@@ -176,7 +179,9 @@ def _analyze(
     # Event candidates are derived after inference, so the detector choice does not
     # invalidate cached predictions or block resuming an older interrupted run.
     inference_settings = {
-        k: v for k, v in asdict(settings).items() if k not in ("event_detector", "spin_detector")
+        k: v
+        for k, v in asdict(settings).items()
+        if k not in ("event_detector", "spin_detector", "stroke_detector")
     }
     identity = {
         "source_sha256": sha256(source),
@@ -498,8 +503,9 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
 
         detector = summary["settings"].get("event_detector", "baseline-v1")
         spin_detector = summary["settings"].get("spin_detector")
+        stroke_detector = summary["settings"].get("stroke_detector")
         if manifest and manifest["schema_version"] == 3:
-            from tennis_ai.events import generate_candidates
+            from tennis_ai.events import candidate_events
             from tennis_ai.evidence import load_evidence, persist_frame_tracks, validate_evidence
 
             # Rendering overlays does not replace the versioned review graph.
@@ -509,21 +515,12 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
                 and not bundle["events"]["events"]
                 and not bundle["audit"]
             ):
-                with relative_asset(output, artifacts["frames"]).open() as stream:
-                    bundle["events"]["events"] = list(
-                        generate_candidates(
-                            (json.loads(line) for line in stream if line.strip()), detector
-                        )
-                    )
-                if spin_detector:
-                    from tennis_ai.events import annotate_spin
-
-                    with relative_asset(output, artifacts["frames"]).open() as stream:
-                        bundle["events"]["events"] = annotate_spin(
-                            bundle["events"]["events"],
-                            (json.loads(line) for line in stream if line.strip()),
-                            spin_detector,
-                        )
+                bundle["events"]["events"] = candidate_events(
+                    relative_asset(output, artifacts["frames"]),
+                    detector,
+                    spin_detector,
+                    stroke_detector,
+                )
                 validate_evidence(bundle, manifest["media"]["duration"])
                 atomic_json(relative_asset(output, artifacts["events"]), bundle["events"])
             with relative_asset(output, artifacts["frames"]).open() as stream:
@@ -537,6 +534,7 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
                 corrections_path,
                 detector,
                 spin_detector,
+                stroke_detector,
             )
         with relative_asset(output, artifacts["frames"]).open() as stream:
             summary["capture_quality"] = summarize_quality(

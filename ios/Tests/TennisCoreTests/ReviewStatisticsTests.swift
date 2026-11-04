@@ -28,10 +28,12 @@ final class ReviewStatisticsTests: XCTestCase {
         let corrected = try EvidenceBundle.load(fixture.deletingLastPathComponent().appendingPathComponent("corrected"))
         XCTAssertEqual(corrected.events.events.first { $0.id == "shot-1" }?.spin, .slice)
         let report = try ReviewReport(bundle: corrected, view: .humanVerified, end: 5)
-        XCTAssertEqual(report.definitionVersion, "review-loop-v2")
+        XCTAssertEqual(report.definitionVersion, "review-loop-v3")
         XCTAssertEqual(report.metrics.first { $0.id == "spin.slice" }?.value, 1)
         XCTAssertEqual(report.metrics.first { $0.id == "spin.topspin" }?.value, 0)
         XCTAssertEqual(report.metrics.first { $0.id == "spin.topspin" }?.supportRefs, ["shot-1"])
+        XCTAssertEqual(report.metrics.first { $0.id == "technique.forehand.slice" }?.value, 1)
+        XCTAssertEqual(report.metrics.first { $0.id == "technique.backhand.slice" }?.value, 0)
         let full = try ReviewReport(bundle: try EvidenceBundle.load(fixture), view: .humanVerified, end: 5)
         XCTAssertEqual(full.metrics.first { $0.id == "spin.unknown" }?.value, 1)
     }

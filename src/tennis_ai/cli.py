@@ -59,6 +59,11 @@ def main():
         choices=["wrist-v1"],
         help="Unvalidated spin candidates (slice/topspin) for automatic hits",
     )
+    analysis.add_argument(
+        "--stroke-detector",
+        choices=["stroke-v1"],
+        help="Unvalidated serve/forehand/backhand/volley candidates for automatic hits",
+    )
     resume = commands.add_parser("resume", help="Continue an interrupted analysis")
     resume.add_argument("output")
     render = commands.add_parser("render")
@@ -142,6 +147,7 @@ def main():
                     spin_detector=args.spin_detector,
                     ball_model=args.ball_model,
                     pose_stride=args.pose_stride,
+                    stroke_detector=args.stroke_detector,
                 ),
                 cancel,
                 lambda f, m: print(f"{f:.0%}: {m}", flush=True),
