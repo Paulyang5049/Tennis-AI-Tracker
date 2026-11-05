@@ -71,6 +71,7 @@ calibration; the downloaded third-party court checkpoint is excluded from iOS.
 | Portable source, correction persistence and audio export | Automated integration tests cover moving folders, deleting the external original, rerendering and timed AAC/H.264 export. |
 | Core ML conversion | Actual YOLO26s 640 FP16 package verified and executed on macOS. See [model evidence](MODEL_RELEASE.md). |
 | Python/Swift interoperability | Shared fixtures and Swift core tests; native SDK build results are recorded separately in the iOS instructions. |
+| Broadcast ball reference benchmark | Development-only: published WASB tennis weights reached precision 0.95, recall 0.93 on three held-out broadcast matches; see [validation](../VALIDATION.md). Not phone evidence and not integrated into the app. |
 | Phone ball precision / recall | Pending independently labelled phone singles and doubles, five original matches per setting; target >=90% precision and >=75% recall with near/far breakdown. |
 | Hit, bounce, rally and five-stroke accuracy | Pending complete event annotations and a trained/validated classifier; heuristics and manual edits do not satisfy this requirement. |
 | Model conversion parity | Pending independently labelled fixed-frame comparison; ball precision and recall each may drop by at most 2 percentage points. |

@@ -83,3 +83,18 @@ The same 13 broadcast clips were analysed with `--ball-model tracknet-v2 --event
 - `contact-v2` produced 104 hit candidates from TrackNet frames and placed a candidate within 95 of the 101 contact windows derived from the default trajectory.
 - TrackNet analysis ran at 2.8 frames per second against 7.3 for the default, because it adds a full-resolution heatmap network per frame. It stays opt-in.
 - The run exposed that Ultralytics strips apostrophes from weight paths, so a project under a folder such as "Paul's SSD" could not load any model. Weights are now passed through an apostrophe-free link.
+
+## WASB-SBDT tennis ball benchmark — 2026-11-05
+
+`notebooks/03_benchmark_wasb_tennis.ipynb` ran the published WASB-SBDT evaluation (commit 923462c, MIT) in Google Colab on an NVIDIA L4. Each of four models used its upstream tennis weights. The dataset is the TrackNet tennis broadcast set; the held-out test matches are game8–game10 (5,640 frames), grouped by match as upstream splits them. Upstream defaults were used (score threshold 0.5, 4-pixel match distance) and nothing was tuned on the test matches. Current Colab needed hydra-core 1.3.2 and an `np.Inf` → `np.inf` patch; neither changes metric code. Data, weights and logs stay in Google Drive. The [checked-in snapshot](docs/data/development-2026-11-05.json) records checksums and per-model counts.
+
+| Model | Precision | Recall | F1 | AP | RMSE (px) |
+|---|---|---|---|---|---|
+| WASB | 0.9525 | 0.9268 | 0.9395 | 0.9098 | 8.88 |
+| MonoTrack | 0.9321 | 0.9108 | 0.9213 | 0.8729 | 36.20 |
+| ResTrackNetV2 | 0.9275 | 0.8790 | 0.9026 | 0.8185 | 41.36 |
+| TrackNetV2 | 0.9413 | 0.8509 | 0.8938 | 0.8065 | 47.92 |
+
+- WASB uses its own online tracker; the other three use upstream's intra-frame peak tracker, so part of the position-error gap comes from tracking rather than detection.
+- This is broadcast footage only. It is a reference result, not phone accuracy and not a promotion gate. The shipped YOLO sports-ball default and the app's opt-in `tracknet-v2` (different weights) were not run on this test set, so no comparison with them is claimed.
+- The dataset licence has not been verified; the data stays out of the repository.

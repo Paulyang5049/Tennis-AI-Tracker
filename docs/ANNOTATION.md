@@ -80,6 +80,23 @@ review a representative subset and adjudicate disagreements before evaluating.
 Automatic candidates remain unreviewed until a person explicitly confirms them;
 favoriting a candidate does not verify it.
 
+## TenniSet contact windows
+
+TenniSet labels each hit and serve as a frame interval around the stroke (a median
+of 28 frames for hits), not as a contact frame. Those labels therefore do not become
+`event_annotations.json` hits, which must be instantaneous. Instead,
+`scripts/tenniset_windows.py convert V010.json V010.windows.json` writes a separate
+contact-window document in source frame numbers, with the annotation checksum,
+mapped strokes and its limitations. `score V010.windows.json <analysis folder>`
+then counts one hit candidate per window, reports serves and other hits separately,
+and lists unmatched candidates outside labelled points apart from the rest. Run the
+analysis on the complete original video so frame numbers line up.
+
+TenniSet's Train/Val/Test ranges split one match by time; keep each video in a single
+split here instead. Its licence is unverified, so keep the files local. A match inside
+a window shows that a candidate fell within the labelled stroke, not that its timing
+is right.
+
 ## Gates and contribution
 
 The upgrade protocol is [EVALUATION_PROTOCOL.md](EVALUATION_PROTOCOL.md). A clip may declare
