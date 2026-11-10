@@ -623,10 +623,11 @@ def create_app(root):
                         ["auto", "mps", "cpu", "cuda"], value="auto", label="Processing device"
                     )
                     ball_tracker = gr.Dropdown(
-                        ["baseline-v1", "experimental-motion-v1"],
+                        ["baseline-v1", "experimental-motion-v1", "static-reject-v1"],
                         value="baseline-v1",
                         label="Ball tracker",
-                        info="experimental-motion-v1 is experimental and unvalidated",
+                        info="Others are opt-in: static-reject-v1 drops detections that stay "
+                        "in one place (broadcast graphics); see VALIDATION.md",
                     )
                     event_detector = gr.Dropdown(
                         ["baseline-v1", "contact-v2"],

@@ -19,7 +19,7 @@ from typing import Any
 
 import cv2
 
-from tennis_ai.tracking import BallTracker
+from tennis_ai.tracking import TRACKERS, create_ball_tracker
 
 DEFINITION = "ball-public-v1"
 SPLITS = {"train": (1, 2, 3, 4, 5, 6), "val": (7, 8), "test": (9, 10)}
@@ -36,21 +36,21 @@ def clips(dataset, games):
                 yield game, folder, list(csv.DictReader(stream))
 
 
-def predict(dataset, games, detect, reset=lambda: None):
+def predict(dataset, games, detect, reset=lambda: None, tracker="baseline-v1"):
     """One row per labelled frame: truth, detector candidates and the tracker's pick.
 
-    The pick uses the shipped baseline tracker without court geometry, so this
-    measures detector plus temporal selection, not the full pipeline.
+    The pick uses a ball tracker without court geometry, so this measures detector
+    plus temporal selection, not the full pipeline.
     """
     for game, folder, labels in clips(dataset, games):
         reset()
-        tracker = BallTracker()
+        selector = create_ball_tracker(tracker)
         for index, label in enumerate(labels):
             frame = cv2.imread(str(folder / label["file name"]))
             if frame is None:
                 raise ValueError(f"Unreadable frame {folder / label['file name']}")
             candidates = detect(frame)
-            ball = tracker.update(candidates, index / FPS, frame.shape, None)
+            ball = selector.update(candidates, index / FPS, frame.shape, None)
             scale = 1280 / frame.shape[1]
             visibility = int(label["visibility"])
             yield {
@@ -67,10 +67,24 @@ def predict(dataset, games, detect, reset=lambda: None):
                     [
                         (c["box"][0] + c["box"][2]) / 2 * scale,
                         (c["box"][1] + c["box"][3]) / 2 * scale,
+                        c["confidence"],
                     ]
                     for c in candidates
                 ],
             }
+
+
+def replay(rows, tracker):
+    """Re-run only the selector over cached candidates; seconds instead of a model pass."""
+    selector: Any = None
+    clip, index = None, 0
+    for row in rows:
+        if (row["game"], row["clip"]) != clip:
+            selector, clip, index = create_ball_tracker(tracker), (row["game"], row["clip"]), 0
+        candidates = [{"box": [x, y, x, y], "confidence": c} for x, y, c in row["candidates"]]
+        ball = selector.update(candidates, index / FPS, (720, 1280), None)
+        index += 1
+        yield {**row, "selected": ball["xy"]}
 
 
 def score(rows, tolerance):
@@ -88,7 +102,7 @@ def score(rows, tolerance):
             seen = by_visibility.setdefault(str(row["visibility"]), [0, 0])
             seen[0] += hit
             seen[1] += 1
-            reachable += any(math.dist(truth, c) <= tolerance for c in row["candidates"])
+            reachable += any(math.dist(truth, c[:2]) <= tolerance for c in row["candidates"])
     precision = tp / (tp + fp) if tp + fp else None
     recall = tp / (tp + fn) if tp + fn else None
     return {
@@ -109,7 +123,7 @@ def score(rows, tolerance):
     }
 
 
-def report(rows, model, weights_sha256=None):
+def report(rows, model, weights_sha256=None, tracker="baseline-v1"):
     rows = list(rows)
     games = sorted({row["game"] for row in rows})
     groups = {name: [r for r in rows if r["game"] in members] for name, members in SPLITS.items()}
@@ -121,7 +135,7 @@ def report(rows, model, weights_sha256=None):
         "model": model,
         "weights_sha256": weights_sha256,
         "in_sample_warning": IN_SAMPLE.get(model),
-        "selector": "BallTracker baseline-v1 without court geometry",
+        "selector": f"{tracker} without court geometry",
         "splits": {name: list(members) for name, members in SPLITS.items()},
         "results": {
             f"{tolerance}px": {
@@ -137,7 +151,9 @@ def main():
     from tennis_ai.models import BALL_MODELS, TrackNetBall, choose_device
 
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("dataset", help="Folder holding game1 ... game10")
+    parser.add_argument("dataset", nargs="?", help="Folder holding game1 ... game10")
+    parser.add_argument("--replay", help="Rescore cached --frames rows with another ball tracker")
+    parser.add_argument("--ball-tracker", choices=TRACKERS, default="baseline-v1")
     parser.add_argument("--root", default=str(Path.cwd()), help="Project assets folder")
     parser.add_argument("--model", choices=BALL_MODELS, default="yolo-coco")
     parser.add_argument("--device", default="auto")
@@ -145,16 +161,23 @@ def main():
     parser.add_argument("--frames", help="Also keep per-frame rows (JSONL) for later rescoring")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
-    device = choose_device(args.device)
     models = Path(args.root) / "models"
+    weights = models / ("tracknet_ball.pt" if args.model == "tracknet-v2" else "yolo26s.pt")
+    if args.replay:
+        with open(args.replay) as cached:
+            rows = list(replay(map(json.loads, cached), args.ball_tracker))
+        result = report(rows, args.model, sha256(weights), args.ball_tracker)
+        Path(args.output).write_text(json.dumps(result, indent=2) + "\n")
+        return
+    if not args.dataset:
+        parser.error("dataset is required unless --replay is given")
+    device = choose_device(args.device)
     if args.model == "tracknet-v2":
-        weights = models / "tracknet_ball.pt"
         tracknet = TrackNetBall(args.root, device)
         detect, reset = tracknet.detect, tracknet.reset
     else:
         from ultralytics import YOLO
 
-        weights = models / "yolo26s.pt"
         yolo: Any = YOLO(ultralytics_path(weights))
 
         def detect(frame):
@@ -172,7 +195,7 @@ def main():
 
     rows = []
     stream = open(args.frames, "w") if args.frames else None
-    for row in predict(args.dataset, args.games, detect, reset):
+    for row in predict(args.dataset, args.games, detect, reset, args.ball_tracker):
         rows.append(row)
         if stream:
             stream.write(json.dumps(row) + "\n")
@@ -180,7 +203,7 @@ def main():
             print(f"game{row['game']} {row['clip']}", flush=True)
     if stream:
         stream.close()
-    result = report(rows, args.model, sha256(weights))
+    result = report(rows, args.model, sha256(weights), args.ball_tracker)
     Path(args.output).write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result["results"]["5px"].get("test"), indent=2))
 

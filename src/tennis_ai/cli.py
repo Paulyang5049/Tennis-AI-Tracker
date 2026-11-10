@@ -31,7 +31,10 @@ def main():
     analysis.add_argument("--ball-bundle")
     analysis.add_argument("--court-bundle")
     analysis.add_argument(
-        "--ball-tracker", choices=["baseline-v1", "experimental-motion-v1"], default="baseline-v1"
+        "--ball-tracker",
+        choices=["baseline-v1", "experimental-motion-v1", "static-reject-v1"],
+        default="baseline-v1",
+        help="static-reject-v1 (opt-in) drops detections that stay in one place",
     )
     analysis.add_argument(
         "--overlay-masks", help="JSON list of normalized overlay boxes; experimental tracker only"

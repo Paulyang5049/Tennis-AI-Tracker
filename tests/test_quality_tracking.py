@@ -48,3 +48,16 @@ def test_stationary_overlay_suppression_and_resume_match():
             boxes, i / 30, (180, 320), None
         )
     assert tracker.update([candidate(10, 10)], 0.5, (180, 320), None)["status"] == "missing"
+
+
+def test_static_reject_drops_a_fixed_object_anywhere_but_keeps_a_moving_ball():
+    baseline = create_ball_tracker("baseline-v1")
+    tracker = create_ball_tracker("static-reject-v1")
+    picks = []
+    for i in range(20):
+        # A logo low in the frame outscores a ball that moves 8 px per frame.
+        boxes = [candidate(40, 160, 0.9), candidate(100 + 8 * i, 60, 0.4)]
+        baseline_pick = baseline.update(boxes, i / 30, (180, 320), None)["xy"]
+        picks.append(tracker.update(boxes, i / 30, (180, 320), None)["xy"])
+    assert baseline_pick == [40, 160]
+    assert picks[0] == [40, 160] and picks[-1] == [100 + 8 * 19, 60]

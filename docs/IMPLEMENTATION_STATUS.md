@@ -18,7 +18,8 @@ Added 2026-11-11: an opt-in `--view-filter main-view-v1` that ignores broadcast 
 without a court calibration when finding event candidates, and
 `python -m tennis_ai.ball_benchmark`, which scores ball detectors on the public TrackNet
 dataset split by game. Both are development evidence only; results and their limits are in
-[VALIDATION.md](../VALIDATION.md). No ball or event model has been promoted.
+[VALIDATION.md](../VALIDATION.md). An opt-in ball selector, `static-reject-v1`, drops
+detections that stay in one place. No ball or event model has been promoted.
 
 ## Implemented and locally exercised
 

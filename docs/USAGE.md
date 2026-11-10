@@ -51,11 +51,16 @@ For a different working directory, pass `--root /absolute/path/to/AI_tennis` **b
 
 `--view-filter main-view-v1` is for broadcast video. Frames without a court calibration (close-ups, replays, crowd shots) are ignored when finding hit, bounce and rally candidates, and each return to the main camera starts a new scene. It is opt-in and has no labelled accuracy yet; see [VALIDATION.md](../VALIDATION.md).
 
+`--ball-tracker static-reject-v1` drops any ball detection that stays in the same place for about a third of a second, which stops the selector from locking onto broadcast graphics or a spare ball. It is opt-in; `baseline-v1` remains the default until it is checked through the full pipeline. See [VALIDATION.md](../VALIDATION.md).
+
 To score a ball detector on the public TrackNet tennis dataset (downloaded separately, kept local), split by game:
 
 ```sh
-.venv/bin/python -m tennis_ai.ball_benchmark data/public/tracknet/extracted/Dataset --model yolo-coco --output outputs/ball-public/yolo-coco.json
+.venv/bin/python -m tennis_ai.ball_benchmark data/public/tracknet/extracted/Dataset --model yolo-coco --frames outputs/ball-public/yolo-coco.frames.jsonl --output outputs/ball-public/yolo-coco.json
+.venv/bin/python -m tennis_ai.ball_benchmark --replay outputs/ball-public/yolo-coco.frames.jsonl --model yolo-coco --ball-tracker static-reject-v1 --output outputs/ball-public/yolo-coco.static.json
 ```
+
+The second command rescores the cached detections with another ball tracker in seconds, without running the model again.
 
 An analysis folder contains:
 

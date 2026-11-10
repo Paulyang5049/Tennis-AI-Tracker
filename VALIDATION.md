@@ -108,5 +108,13 @@ The same 13 broadcast clips were analysed with `--ball-model tracknet-v2 --event
 - **The TrackNet figures are in-sample and are not a held-out result.** The upstream training script shuffles the frames of all ten games before its 70/30 split, so the published weights (the same file as `models/tracknet_ball.pt`, by SHA-256) have probably seen every game. They show what the model does on footage like its training data, nothing more. A fair comparison needs labelled frames from other matches.
 - The YOLO detector was never trained on this data, so its figures are clean. It finds the labelled point among its candidates in under half of the ball frames, and almost never when the label marks the ball as hard to see (43 of 277 test frames).
 - In games 1 and 5 the selector locked onto a fixed on-screen object for nearly the whole game (0 correct of 1,920 ball frames in game 1) although the right point was among the candidates in 28% and 72% of frames. This is a selector failure, separate from detector recall; court geometry, which the pipeline normally supplies, was not available here.
+- An opt-in selector, `--ball-tracker static-reject-v1`, drops any detection that stays in one 6-pixel cell for at least 10 frames and 0.3 s. Its thresholds were fixed before scoring; a sweep on the train and validation games showed nearby settings behave alike (a faster 6-frame setting scored about 0.015 F1 higher on train and was not adopted). The test games were scored once, after that. With the same YOLO detections at 5 px:
+
+  | Selector | Train P / R | Validation P / R | Test P / R |
+  |---|---:|---:|---:|
+  | `baseline-v1` | 0.245 / 0.195 | 0.693 / 0.407 | 0.553 / 0.338 |
+  | `static-reject-v1` | 0.782 / 0.407 | 0.790 / 0.450 | 0.775 / 0.428 |
+
+  Recall now sits close to the detector's ceiling (0.441, 0.477 and 0.476), so what remains is detector recall. Game 1 went from 0 to 445 correct frames of 1,920. With TrackNet detections the two selectors score the same to within 0.001. The dataset is 30 fps rally clips only; the selector has not been run through the full pipeline, on 25 or 60 fps footage, or on whole broadcasts, so `baseline-v1` stays the default.
 - On the Apple M4, YOLO ran at about 16 frames per second and TrackNet at about 4.5, reading images from an external drive.
 - The labels also mark 516 hit frames and 523 bounce frames. They have not been used yet.
