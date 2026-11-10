@@ -83,3 +83,30 @@ The same 13 broadcast clips were analysed with `--ball-model tracknet-v2 --event
 - `contact-v2` produced 104 hit candidates from TrackNet frames and placed a candidate within 95 of the 101 contact windows derived from the default trajectory.
 - TrackNet analysis ran at 2.8 frames per second against 7.3 for the default, because it adds a full-resolution heatmap network per frame. It stays opt-in.
 - The run exposed that Ultralytics strips apostrophes from weight paths, so a project under a folder such as "Paul's SSD" could not load any model. Weights are now passed through an apostrophe-free link.
+
+## Main-camera view filter on a full broadcast — 2026-11-10
+
+`--view-filter main-view-v1` was applied to the cached frames of one full broadcast run (41,564 frames at 59.94 fps; footage and outputs stay outside version control). No event labels exist for this match, so these are development observations, not accuracy.
+
+- A court calibration was present in 21,011 frames, grouped into 35 main-camera segments. The existing cut detector reported only 18 scenes, so it misses most cuts on this footage.
+- Two contact sheets were inspected: 24 of 24 sampled frames with a court were the main camera; 22 of 24 sampled frames without a court were close-ups, replays or crowd shots, and 2 were main-camera frames the court model missed.
+- With the filter, `baseline-v1` hit candidates fell from 112 to 40 and rallies from 24 to 10; `contact-v2` hit candidates fell from 220 to 166 and rallies from 37 to 27. Bounce candidates fell from 54 to 46 in both. Whether the removed candidates were false is not measured.
+
+## Ball detectors on the public TrackNet dataset — 2026-11-11
+
+`python -m tennis_ai.ball_benchmark` scored both ball detectors on the public TrackNet tennis dataset: 10 broadcast games, 95 rally clips, 19,835 frames at 1280×720 and 30 fps, one labelled ball point per frame (729 frames without a ball). The dataset stays local and is not redistributed; its readme states no licence. Whole games form the splits: games 1–6 train, 7–8 validation, 9–10 test. A prediction counts when it lies within the tolerance of the label; a wrong position is both a false positive and a miss. Each detector's candidates pass through the shipped `baseline-v1` ball selector without court geometry, so this is not the full pipeline.
+
+| Detector | Split | Frames | Precision (5 px) | Recall (5 px) | Precision (10 px) | Recall (10 px) | Right point among candidates (5 px) |
+|---|---|---:|---:|---:|---:|---:|---:|
+| YOLO26s COCO sports ball (default) | train | 12,279 | 0.245 | 0.195 | 0.278 | 0.221 | 0.441 |
+| | validation | 3,839 | 0.693 | 0.407 | 0.784 | 0.461 | 0.477 |
+| | test | 3,717 | 0.553 | 0.338 | 0.581 | 0.355 | 0.476 |
+| TrackNet (`tracknet-v2`, in-sample) | train | 12,279 | 0.972 | 0.936 | 0.995 | 0.958 | 0.939 |
+| | validation | 3,839 | 0.968 | 0.919 | 0.994 | 0.943 | 0.926 |
+| | test | 3,717 | 0.979 | 0.939 | 0.997 | 0.956 | 0.939 |
+
+- **The TrackNet figures are in-sample and are not a held-out result.** The upstream training script shuffles the frames of all ten games before its 70/30 split, so the published weights (the same file as `models/tracknet_ball.pt`, by SHA-256) have probably seen every game. They show what the model does on footage like its training data, nothing more. A fair comparison needs labelled frames from other matches.
+- The YOLO detector was never trained on this data, so its figures are clean. It finds the labelled point among its candidates in under half of the ball frames, and almost never when the label marks the ball as hard to see (43 of 277 test frames).
+- In games 1 and 5 the selector locked onto a fixed on-screen object for nearly the whole game (0 correct of 1,920 ball frames in game 1) although the right point was among the candidates in 28% and 72% of frames. This is a selector failure, separate from detector recall; court geometry, which the pipeline normally supplies, was not available here.
+- On the Apple M4, YOLO ran at about 16 frames per second and TrackNet at about 4.5, reading images from an external drive.
+- The labels also mark 516 hit frames and 523 bounce frames. They have not been used yet.

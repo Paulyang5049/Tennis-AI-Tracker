@@ -14,6 +14,12 @@ evidence. They are Python-only, add no measured facts, and have been tested on s
 bundles and the shared v3 fixture only; no reviewed real match has been run through them.
 See the [scouting plan](plans/2026-11-10-feat-shot-pattern-scouting-plan.md).
 
+Added 2026-11-11: an opt-in `--view-filter main-view-v1` that ignores broadcast frames
+without a court calibration when finding event candidates, and
+`python -m tennis_ai.ball_benchmark`, which scores ball detectors on the public TrackNet
+dataset split by game. Both are development evidence only; results and their limits are in
+[VALIDATION.md](../VALIDATION.md). No ball or event model has been promoted.
+
 ## Implemented and locally exercised
 
 - Self-contained analysis folders, legacy export, source integrity checks and relative paths.
