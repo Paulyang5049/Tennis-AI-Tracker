@@ -4,6 +4,16 @@ This branch implements the desktop review/data workflow, shared AnalysisPackage 
 a Core ML conversion toolchain and a native iOS 26 development app. It is not an
 App Store release, a validated automatic stroke classifier or a phone accuracy report.
 
+## Scope change — 2026-11-10
+
+Broadcast-style main-camera video is now the first target; phone capture and the iOS app
+are paused. The phone and device gates below stay open and are not satisfied by broadcast
+results. `tennis-ai shots` and `tennis-ai tendency` derive 2D shot paths (hitter ground
+point to linked bounce) and filtered tendencies with Wilson intervals from existing
+evidence. They are Python-only, add no measured facts, and have been tested on synthetic
+bundles and the shared v3 fixture only; no reviewed real match has been run through them.
+See the [scouting plan](plans/2026-11-10-feat-shot-pattern-scouting-plan.md).
+
 ## Implemented and locally exercised
 
 - Self-contained analysis folders, legacy export, source integrity checks and relative paths.

@@ -94,6 +94,36 @@ def main():
     report.add_argument("--start", type=float, default=0.0)
     report.add_argument("--end", type=float)
     report.add_argument("--output", required=True)
+    shots = commands.add_parser(
+        "shots", help="Derive 2D shot paths (hitter position to linked bounce) from evidence"
+    )
+    tendency_parser = commands.add_parser(
+        "tendency", help="Where one player hits, given filters on the shot and the incoming shot"
+    )
+    for derived in (shots, tendency_parser):
+        derived.add_argument("folder")
+        derived.add_argument("--view", choices=["assisted", "human_verified"], default="assisted")
+        derived.add_argument(
+            "--handedness",
+            action="append",
+            default=[],
+            metavar="PARTICIPANT=right|left",
+            help="Enables inside-out/inside-in labels for that participant",
+        )
+        derived.add_argument("--output", required=True)
+    tendency_parser.add_argument("--participant")
+    tendency_parser.add_argument(
+        "--where", action="append", default=[], metavar="KEY=VALUE", help="e.g. role=return"
+    )
+    tendency_parser.add_argument(
+        "--incoming",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="Filter on the shot being answered, e.g. serve_side=deuce direction=wide",
+    )
+    tendency_parser.add_argument("--min-support", type=int, default=8)
+    tendency_parser.add_argument("--map", help="Also write a top-down court picture (PNG)")
     clip = commands.add_parser("clip", help="Export an original-video interval with audio")
     clip.add_argument("folder")
     clip.add_argument("--start", type=float, required=True)
@@ -159,6 +189,29 @@ def main():
                 start=args.start,
                 end=args.end if args.end is not None else manifest["media"]["duration"],
             )
+            atomic_json(args.output, result)
+            print(args.output)
+        elif args.command in ("shots", "tendency"):
+            from tennis_ai.evidence import load_evidence
+            from tennis_ai.package import atomic_json
+            from tennis_ai.shots import derive_shots
+
+            hands = dict(item.partition("=")[::2] for item in args.handedness)
+            result = derive_shots(load_evidence(args.folder), view=args.view, handedness=hands)
+            if args.command == "tendency":
+                import cv2
+
+                from tennis_ai.tactics import court_map, parse_filters, tendency
+
+                result = tendency(
+                    result,
+                    participant_id=args.participant,
+                    where=parse_filters(args.where),
+                    incoming=parse_filters(args.incoming),
+                    min_support=args.min_support,
+                )
+                if args.map and not cv2.imwrite(args.map, court_map(result, args.participant)):
+                    raise RuntimeError("Could not write the court map")
             atomic_json(args.output, result)
             print(args.output)
         elif args.command == "review-entity":

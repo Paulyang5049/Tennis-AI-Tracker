@@ -10,8 +10,10 @@ evidence, the contracts and evidence win until they are deliberately updated tog
 ## Product contract
 
 - Build an offline, evidence-first tennis analysis tool for players and coaches.
-- The iOS app is the player workflow. The Python/Gradio application is the annotation,
-  training, benchmark and advanced-review workbench.
+- The Python/Gradio application is the active product: analysis, review, shot-pattern
+  scouting, annotation, training and benchmarks on elevated broadcast-style ("Hawk-Eye
+  camera") video. The iOS app is paused (2026-11-10): keep it building and its contracts
+  readable, but do not add player features there until the user reactivates it.
 - Keep automatic candidates, reviewed facts and derived coaching claims visibly distinct.
   Confidence, coverage or a plausible clip is not ground-truth accuracy.
 - Candidate evidence may power a clearly labelled assisted estimate, but only human-reviewed
@@ -27,8 +29,14 @@ evidence, the contracts and evidence win until they are deliberately updated tog
 - Record contact as two different observations: the player's court position at contact
   and the ball/racket contact point in image pixels. Do not claim a three-dimensional
   contact coordinate unless a separately validated calibration supports it.
-- Singles on fixed, full-court phone video is the first promotion target. Preserve doubles
-  in schemas, but do not describe it as validated until its own held-out gate passes.
+- Singles on broadcast-style main-camera video is the first promotion target (changed from
+  fixed phone video on 2026-11-10). Replays, close-ups and crowd shots are not analysed.
+  Phone capture and doubles stay in schemas, but neither is described as validated until its
+  own held-out gate passes. Existing phone-specific gates stay recorded and simply remain
+  open; a broadcast result never satisfies them.
+- Start from published open models (YOLO, TrackNet and similar) plus fine-tuning. Training a
+  model from scratch is a later stage, after the data, review and benchmark foundations exist;
+  see `docs/research/2026-11-10-model-landscape.md`.
 - Keep imported video and analysis local by default. Do not commit private footage,
   generated match outputs, datasets, credentials or model weights.
 - Keep scene-local near/far tracks separate from persistent self/opponent participants. A
@@ -52,6 +60,9 @@ evidence, the contracts and evidence win until they are deliberately updated tog
 - `docs/plans/2026-09-11-1411-feat-tennis-coaching-intelligence-plan.md` is the approved
   implementation sequence once the user accepts it. It does not override evidence or
   release gates.
+- `docs/plans/2026-11-10-feat-shot-pattern-scouting-plan.md` refines its U4/U5 for
+  broadcast-first shot-pattern scouting. `src/tennis_ai/shots.py` and `tactics.py` derive
+  shot paths and tendencies from existing evidence; they add no measured facts.
 
 ## Engineering boundaries
 
