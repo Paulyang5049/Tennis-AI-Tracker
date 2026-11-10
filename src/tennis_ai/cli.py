@@ -59,6 +59,11 @@ def main():
         choices=["wrist-v1"],
         help="Unvalidated spin candidates (slice/topspin) for automatic hits",
     )
+    analysis.add_argument(
+        "--view-filter",
+        choices=["main-view-v1"],
+        help="Broadcast video: ignore close-ups, replays and crowd shots when finding events",
+    )
     resume = commands.add_parser("resume", help="Continue an interrupted analysis")
     resume.add_argument("output")
     render = commands.add_parser("render")
@@ -172,6 +177,7 @@ def main():
                     spin_detector=args.spin_detector,
                     ball_model=args.ball_model,
                     pose_stride=args.pose_stride,
+                    view_filter=args.view_filter,
                 ),
                 cancel,
                 lambda f, m: print(f"{f:.0%}: {m}", flush=True),

@@ -25,6 +25,7 @@ from tennis_ai.quality import quality_for_record, sharpness, summarize_quality
 from tennis_ai.render import Renderer
 from tennis_ai.tracking import SceneMonitor, create_ball_tracker, interpolate
 from tennis_ai.video import Cancelled, VideoWriter, decode, mux_audio, probe
+from tennis_ai.views import VIEW_FILTERS, event_frames
 
 
 @dataclass
@@ -39,6 +40,7 @@ class Settings:
     spin_detector: str | None = None
     ball_model: str = "yolo-coco"
     pose_stride: int = 1
+    view_filter: str | None = None
 
     def __post_init__(self):
         if self.players not in (2, 4):
@@ -49,6 +51,8 @@ class Settings:
         create_event_detector(self.event_detector)
         if self.spin_detector not in (None, *SPIN_DETECTORS):
             raise ValueError("Unsupported spin detector version")
+        if self.view_filter not in (None, *VIEW_FILTERS):
+            raise ValueError("Unsupported view filter")
         if self.ball_model not in BALL_MODELS:
             raise ValueError("Unsupported ball model")
         if self.ball_model != "yolo-coco" and self.ball_bundle:
@@ -176,7 +180,9 @@ def _analyze(
     # Event candidates are derived after inference, so the detector choice does not
     # invalidate cached predictions or block resuming an older interrupted run.
     inference_settings = {
-        k: v for k, v in asdict(settings).items() if k not in ("event_detector", "spin_detector")
+        k: v
+        for k, v in asdict(settings).items()
+        if k not in ("event_detector", "spin_detector", "view_filter")
     }
     identity = {
         "source_sha256": sha256(source),
@@ -498,6 +504,7 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
 
         detector = summary["settings"].get("event_detector", "baseline-v1")
         spin_detector = summary["settings"].get("spin_detector")
+        view_filter = summary["settings"].get("view_filter")
         if manifest and manifest["schema_version"] == 3:
             from tennis_ai.events import generate_candidates
             from tennis_ai.evidence import load_evidence, persist_frame_tracks, validate_evidence
@@ -509,12 +516,12 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
                 and not bundle["events"]["events"]
                 and not bundle["audit"]
             ):
-                with relative_asset(output, artifacts["frames"]).open() as stream:
-                    bundle["events"]["events"] = list(
-                        generate_candidates(
-                            (json.loads(line) for line in stream if line.strip()), detector
-                        )
+                bundle["events"]["events"] = list(
+                    generate_candidates(
+                        event_frames(relative_asset(output, artifacts["frames"]), view_filter),
+                        detector,
                     )
+                )
                 if spin_detector:
                     from tennis_ai.events import annotate_spin
 
@@ -537,6 +544,7 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
                 corrections_path,
                 detector,
                 spin_detector,
+                view_filter,
             )
         with relative_asset(output, artifacts["frames"]).open() as stream:
             summary["capture_quality"] = summarize_quality(

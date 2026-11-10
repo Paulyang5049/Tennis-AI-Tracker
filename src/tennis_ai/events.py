@@ -597,12 +597,16 @@ def annotate_spin(events, frames, detector="wrist-v1", before=0.3, after=0.1):
 
 
 def regenerate_events(
-    frames_path, events_path, corrections_path=None, detector="baseline-v1", spin_detector=None
+    frames_path,
+    events_path,
+    corrections_path=None,
+    detector="baseline-v1",
+    spin_detector=None,
+    view_filter=None,
 ):
-    with Path(frames_path).open() as stream:
-        candidates = list(
-            generate_candidates((json.loads(line) for line in stream if line.strip()), detector)
-        )
+    from tennis_ai.views import event_frames
+
+    candidates = list(generate_candidates(event_frames(frames_path, view_filter), detector))
     if spin_detector:
         with Path(frames_path).open() as stream:
             candidates = annotate_spin(
