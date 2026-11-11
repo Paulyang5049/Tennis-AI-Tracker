@@ -329,16 +329,18 @@ def create_app(labels):
         with gr.Row():
             remove_id = gr.Textbox(label="Label id to delete")
             remove_button = gr.Button("Delete label")
-        segment.change(choose, segment, [image, frame, time, info, rows, complete, x, y])
-        frame.release(show, [segment, frame], [image, frame, time, info])
+        segment.change(choose, segment, [image, frame, time, info, rows, complete, x, y])  # type: ignore[attr-defined]
+        frame.release(show, [segment, frame], [image, frame, time, info])  # type: ignore[attr-defined]
         for delta, button in buttons.items():
-            button.click(
+            button.click(  # type: ignore[attr-defined]
                 lambda s, f, d=delta: step(s, f, d), [segment, frame], [image, frame, time, info]
             )
-        image.select(click, outputs=[x, y])
-        save_button.click(save, [segment, frame, time, kind, side, stroke, x, y], [rows, x, y])
-        remove_button.click(delete, [segment, remove_id], rows)
-        complete.input(lambda s, c: set_complete(labels, s, c), [segment, complete])
+        image.select(click, outputs=[x, y])  # type: ignore[attr-defined]
+        save_button.click(  # type: ignore[attr-defined]
+            save, [segment, frame, time, kind, side, stroke, x, y], [rows, x, y]
+        )
+        remove_button.click(delete, [segment, remove_id], rows)  # type: ignore[attr-defined]
+        complete.input(lambda s, c: set_complete(labels, s, c), [segment, complete])  # type: ignore[attr-defined]
         app.load(choose, segment, [image, frame, time, info, rows, complete, x, y])
     return app
 
