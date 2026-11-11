@@ -1,0 +1,266 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Derived shot paths (hitter ground point to linked bounce)",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "definition_version",
+    "view",
+    "coordinate_system",
+    "handedness",
+    "shots",
+    "exclusions"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "definition_version": {
+      "const": "shots-v1"
+    },
+    "view": {
+      "enum": [
+        "assisted",
+        "human_verified"
+      ]
+    },
+    "coordinate_system": {
+      "const": "hitter_near_x_right_y_near_m"
+    },
+    "handedness": {
+      "type": "object",
+      "additionalProperties": {
+        "enum": [
+          "right",
+          "left"
+        ]
+      }
+    },
+    "shots": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "start",
+          "scene",
+          "rally_id",
+          "ordinal",
+          "role",
+          "incoming_shot_id",
+          "participant_id",
+          "side",
+          "stroke",
+          "spin",
+          "reviewed",
+          "hitter_position_court_m",
+          "hitter_position_source",
+          "landing_court_m",
+          "bounce_id",
+          "hitter_normalized_m",
+          "landing_normalized_m",
+          "serve_side",
+          "direction",
+          "depth",
+          "width",
+          "landing_in",
+          "support_refs"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "start": {
+            "type": "number",
+            "minimum": 0
+          },
+          "scene": {
+            "type": "integer"
+          },
+          "rally_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ordinal": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "role": {
+            "enum": [
+              "serve",
+              "return",
+              "rally",
+              null
+            ]
+          },
+          "incoming_shot_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "participant_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "side": {
+            "enum": [
+              "near",
+              "far",
+              null
+            ]
+          },
+          "stroke": {
+            "enum": [
+              "serve",
+              "forehand",
+              "backhand",
+              "volley",
+              "overhead",
+              "unknown"
+            ]
+          },
+          "spin": {
+            "enum": [
+              "topspin",
+              "slice",
+              "flat",
+              "unknown",
+              null
+            ]
+          },
+          "reviewed": {
+            "type": "boolean"
+          },
+          "hitter_position_court_m": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          },
+          "hitter_position_source": {
+            "enum": [
+              "event",
+              "track",
+              null
+            ]
+          },
+          "landing_court_m": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          },
+          "bounce_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hitter_normalized_m": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          },
+          "landing_normalized_m": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          },
+          "serve_side": {
+            "enum": [
+              "deuce",
+              "ad",
+              null
+            ]
+          },
+          "direction": {
+            "enum": [
+              "t",
+              "body",
+              "wide",
+              "cross_court",
+              "down_the_line",
+              "middle",
+              "inside_out",
+              "inside_in",
+              null
+            ]
+          },
+          "depth": {
+            "enum": [
+              "short",
+              "mid",
+              "deep",
+              "long",
+              "own_side",
+              null
+            ]
+          },
+          "width": {
+            "enum": [
+              "wide_left",
+              "left",
+              "centre",
+              "right",
+              "wide_right",
+              null
+            ]
+          },
+          "landing_in": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "support_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "exclusions": {
+      "type": "object",
+      "additionalProperties": {
+        "enum": [
+          "excluded",
+          "unreviewed"
+        ]
+      }
+    }
+  }
+}

@@ -124,6 +124,23 @@ The report gives hit precision and recall at 0.1 s and 0.2 s for `baseline-v1` a
 
 `--spin-detector wrist-v1` on `analyze` adds the same unvalidated spin candidates to automatic hits. It reads the hitter's wrist height relative to the shoulder line around contact: high to low suggests slice, low to high topspin. Serves, overheads and unclear swings stay `unknown`, and reviewed or manual hits are never changed.
 
+## Shot paths and tendencies
+
+```sh
+.venv/bin/tennis-ai shots outputs/my-match --view human_verified --output shots.json
+.venv/bin/tennis-ai tendency outputs/my-match --participant opponent \
+  --where role=return --incoming serve_side=deuce --incoming direction=wide \
+  --handedness opponent=right --output return.json --map return.png
+```
+
+`shots` joins each hit to its linked bounce and writes one path per hit in a frame where
+the hitter is always at the bottom. `tendency` filters those paths (`--where` on the shot,
+`--incoming` on the shot it answers) and reports direction, depth and width with counts and
+95% intervals. Both read hits, bounces, links, rallies and identity assignments from a v3
+analysis; anything missing stays empty and is listed as excluded. The serve and return roles
+need a rally whose first shot is labelled `serve`. The direction rules are described in the
+[scouting plan](plans/2026-11-10-feat-shot-pattern-scouting-plan.md).
+
 ## Checks
 
 ```sh

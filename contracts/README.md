@@ -82,3 +82,9 @@ records a complete participant, assignment or rally correction with an optional 
 `quality-v1.schema.json` describes capture eligibility heuristics, not measured accuracy.
 Player ground positions retain their ankle/box method, calibration identity and nullable
 error estimate. An `unknown` side or `ambiguous` role does not establish participant identity.
+
+`shots-v1.schema.json` describes derived shot paths written by `tennis-ai shots`: a hit's
+ground point joined to its linked bounce, rotated so the hitter is on the near side
+(`hitter_near_x_right_y_near_m`), with rule-based direction, depth and width labels. It is
+Python-only output, never an input to either reader, and stored package coordinates are not
+rewritten.
