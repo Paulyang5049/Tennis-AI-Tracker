@@ -77,6 +77,12 @@ class MotionBallChallenger(BallTracker):
     """
 
     version = "experimental-motion-v1"
+    cell = 3  # Pixels; detections in the same cell count as the same object.
+
+    @staticmethod
+    def static(x, y, count, age):
+        """Whether a repeated detection at normalized (x, y) is a fixed overlay."""
+        return y < 0.22 and (x < 0.3 or x > 0.7) and count >= 6 and age >= 0.15
 
     def __init__(self, masks=()):
         super().__init__()
@@ -121,12 +127,11 @@ class MotionBallChallenger(BallTracker):
             x, y = (x1 + x2) / 2, (y1 + y2) / 2
             if any(a <= x / w <= c and b <= y / h <= d for a, b, c, d in self.masks):
                 continue
-            key = f"{round(x / 3)}:{round(y / 3)}"
+            key = f"{round(x / self.cell)}:{round(y / self.cell)}"
             item = self.repeated.setdefault(key, {"first": time, "last": time, "count": 0})
             item["last"] = time
             item["count"] += 1
-            edge = y / h < 0.22 and (x / w < 0.3 or x / w > 0.7)
-            if edge and item["count"] >= 6 and time - item["first"] >= 0.15:
+            if self.static(x / w, y / h, item["count"], time - item["first"]):
                 continue
             accepted.append(candidate)
         # Bound hard-negative context even if a detector floods the frame with candidates.
@@ -139,6 +144,24 @@ class MotionBallChallenger(BallTracker):
         return super().update(accepted, time, shape, court)
 
 
+class StaticRejectTracker(MotionBallChallenger):
+    """Opt-in: drop any detection that stays in one place, anywhere in the frame.
+
+    Broadcast graphics, logos and spare balls sit still; a ball in play does not.
+    Thresholds were chosen on the train games of the public ball benchmark.
+    """
+
+    version = "static-reject-v1"
+    cell = 6
+
+    @staticmethod
+    def static(x, y, count, age):
+        return count >= 10 and age >= 0.3
+
+
+TRACKERS = ("baseline-v1", "experimental-motion-v1", "static-reject-v1")
+
+
 def create_ball_tracker(version="baseline-v1", masks=()):
     if version == "baseline-v1":
         if masks:
@@ -146,6 +169,8 @@ def create_ball_tracker(version="baseline-v1", masks=()):
         return BallTracker()
     if version == "experimental-motion-v1":
         return MotionBallChallenger(masks)
+    if version == "static-reject-v1":
+        return StaticRejectTracker(masks)
     raise ValueError("Unsupported ball tracker version")
 
 
@@ -193,11 +218,23 @@ def interpolate(records, max_gap=0.1):
     yield from pending
 
 
+CUT_DETECTORS = ("baseline-v1", "broadcast-v1")
+
+
 class SceneMonitor:
     """Detect hard cuts and global camera movement using small grayscale frames."""
 
-    def __init__(self):
+    def __init__(self, version="baseline-v1"):
+        if version not in CUT_DETECTORS:
+            raise ValueError("Unsupported cut detector")
+        self.version = version
         self.previous = None
+        self.last_difference = 0.0
+
+    @staticmethod
+    def _histogram(gray):
+        histogram = cv2.calcHist([gray], [0], None, [32], [0, 256])
+        return cv2.normalize(histogram, histogram).flatten()
 
     def update(self, frame):
         gray = cv2.cvtColor(cv2.resize(frame, (160, 90)), cv2.COLOR_BGR2GRAY)
@@ -205,6 +242,16 @@ class SceneMonitor:
         if self.previous is not None:
             difference = float(np.mean(cv2.absdiff(gray, self.previous))) / 255
             cut = difference > 0.24
+            spike = difference > 3 * self.last_difference + 0.01
+            self.last_difference = difference
+            if not cut and self.version == "broadcast-v1" and difference > 0.03 and spike:
+                # Broadcast cuts between similar-looking shots change the brightness
+                # distribution in one isolated step; a pan or slow-motion replay changes
+                # it over many frames, so the step must stand out from the previous one.
+                change = cv2.compareHist(
+                    self._histogram(self.previous), self._histogram(gray), cv2.HISTCMP_BHATTACHARYYA
+                )
+                cut = change > 0.10
             if not cut:
                 shift, response = cv2.phaseCorrelate(
                     self.previous.astype(np.float32), gray.astype(np.float32)

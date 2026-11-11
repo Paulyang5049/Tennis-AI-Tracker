@@ -31,7 +31,10 @@ def main():
     analysis.add_argument("--ball-bundle")
     analysis.add_argument("--court-bundle")
     analysis.add_argument(
-        "--ball-tracker", choices=["baseline-v1", "experimental-motion-v1"], default="baseline-v1"
+        "--ball-tracker",
+        choices=["baseline-v1", "experimental-motion-v1", "static-reject-v1"],
+        default="baseline-v1",
+        help="static-reject-v1 (opt-in) drops detections that stay in one place",
     )
     analysis.add_argument(
         "--overlay-masks", help="JSON list of normalized overlay boxes; experimental tracker only"
@@ -50,14 +53,34 @@ def main():
     )
     analysis.add_argument(
         "--event-detector",
-        choices=["baseline-v1", "contact-v2"],
+        choices=["baseline-v1", "contact-v2", "learned-events-v1"],
         default="baseline-v1",
-        help="contact-v2 is an unvalidated gap-tolerant hit candidate experiment",
+        help="contact-v2 and learned-events-v1 (needs models/learned-events-v1.pt) are opt-in",
     )
     analysis.add_argument(
         "--spin-detector",
         choices=["wrist-v1"],
         help="Unvalidated spin candidates (slice/topspin) for automatic hits",
+    )
+    analysis.add_argument(
+        "--view-filter",
+        choices=["main-view-v1"],
+        help="Broadcast video: ignore close-ups, replays and crowd shots when finding events",
+    )
+    analysis.add_argument(
+        "--auto-links",
+        choices=["auto-v1"],
+        help="Candidate landings for automatic bounces and hit->bounce links (assisted view)",
+    )
+    analysis.add_argument(
+        "--broadcast-scene",
+        choices=["broadcast-v1"],
+        help="Broadcast video: histogram cut test and smoothed court calibration (opt-in)",
+    )
+    analysis.add_argument(
+        "--stroke-detector",
+        choices=["stroke-v1"],
+        help="Unvalidated serve/forehand/backhand/volley candidates for automatic hits",
     )
     resume = commands.add_parser("resume", help="Continue an interrupted analysis")
     resume.add_argument("output")
@@ -172,6 +195,10 @@ def main():
                     spin_detector=args.spin_detector,
                     ball_model=args.ball_model,
                     pose_stride=args.pose_stride,
+                    view_filter=args.view_filter,
+                    broadcast_scene=args.broadcast_scene,
+                    stroke_detector=args.stroke_detector,
+                    auto_links=args.auto_links,
                 ),
                 cancel,
                 lambda f, m: print(f"{f:.0%}: {m}", flush=True),

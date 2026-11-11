@@ -14,6 +14,8 @@ Open http://127.0.0.1:7860 after `tennis-ai app`. Upload a video, select Singles
 
 **Saved analyses and event review:** reopen completed runs or resume a paused job. Under event review, inspect candidates, correct times/types/player IDs, mark reviewed events, exclude false detections and export a selected interval with audio. Only reviewed, non-excluded events enter verified statistics; automatic candidates remain a separate count. Ball annotations distinguish a confirmed absence from an unlabelled frame. See [annotation and benchmark instructions](ANNOTATION.md).
 
+**Tactics:** for a v3 analysis, choose the assisted view (includes unreviewed candidates) or the human-verified view, a player and optional filters (shot, stroke, serve side, the incoming serve side or direction), then click **Show tendency**. The shot map puts the hitter at the bottom; the table lists every shot behind it, and selecting a row exports that shot's clip with two seconds of context. **Export scouting report** writes `reports/scouting-<player>-<view>.md` and `.json` inside the analysis folder: six situations (serve from each side, return of each serve side, rally forehand and backhand), each with its sample size, the most common direction and depth with 95% intervals, a `limited` mark under the minimum support, and the shot ids behind it. Handedness such as `opp=right` enables inside-out/inside-in labels.
+
 **Custom weights:** unzip a Colab bundle into `models/`, enter its absolute folder in the app, and click its verification button. Both checksum and dependency compatibility are checked before inference. Only load checkpoints from a source you trust. Leave the fields blank to retain pretrained models.
 
 ## Installation details
@@ -37,6 +39,7 @@ For a different working directory, pass `--root /absolute/path/to/AI_tennis` **b
 .venv/bin/tennis-ai analyze path/to/video.mp4 --output outputs/my-match --players 4
 .venv/bin/tennis-ai analyze path/to/video.mp4 --output outputs/custom-match --ball-bundle models/ball-bundle
 .venv/bin/tennis-ai analyze path/to/video.mp4 --output outputs/gap-tolerant --event-detector contact-v2
+.venv/bin/tennis-ai analyze path/to/video.mp4 --output outputs/strokes --event-detector contact-v2 --stroke-detector stroke-v1 --spin-detector wrist-v1
 .venv/bin/tennis-ai resume outputs/my-match
 .venv/bin/tennis-ai render outputs/my-match
 .venv/bin/tennis-ai package outputs/my-match outputs/portable-match
@@ -48,6 +51,35 @@ For a different working directory, pass `--root /absolute/path/to/AI_tennis` **b
 `--ball-model tracknet-v2` replaces the single-frame sports-ball detector with an opt-in three-frame TrackNet heatmap model, which is designed for small, fast balls. Run `tennis-ai setup --with-tracknet` first; it downloads third-party code and weights without a licence for local use only (see [THIRD_PARTY.md](../THIRD_PARTY.md)). It has not been evaluated in this project.
 
 `--event-detector contact-v2` selects an experimental hit-candidate detector that tolerates frames where the ball is not observed at contact. It has not been validated against labelled contacts, so `baseline-v1` remains the default. See [VALIDATION.md](../VALIDATION.md).
+
+`--view-filter main-view-v1` is for broadcast video. Frames without a court calibration (close-ups, replays, crowd shots) are ignored when finding hit, bounce and rally candidates, and each return to the main camera starts a new scene. It is opt-in and has no labelled accuracy yet; see [VALIDATION.md](../VALIDATION.md).
+
+`--ball-tracker static-reject-v1` drops any ball detection that stays in the same place for about a third of a second, which stops the selector from locking onto broadcast graphics or a spare ball. It is opt-in; `baseline-v1` remains the default. See [VALIDATION.md](../VALIDATION.md).
+
+`--broadcast-scene broadcast-v1` (opt-in) adds two things for broadcast video: a brightness-histogram test that catches cuts between similar-looking shots, and court smoothing. Within a shot, a court fit that agrees with the current one is blended in, a disagreeing fit replaces it only when the next fit confirms it, and a failed fit keeps the last court for at most two seconds of a still camera (marked `held`). Calibration runs every 0.5 s instead of every second.
+
+To score a ball detector on the public TrackNet tennis dataset (downloaded separately, kept local), split by game:
+
+```sh
+.venv/bin/python -m tennis_ai.ball_benchmark data/public/tracknet/extracted/Dataset --model yolo-coco --frames outputs/ball-public/yolo-coco.frames.jsonl --output outputs/ball-public/yolo-coco.json
+.venv/bin/python -m tennis_ai.ball_benchmark --replay outputs/ball-public/yolo-coco.frames.jsonl --model yolo-coco --ball-tracker static-reject-v1 --output outputs/ball-public/yolo-coco.static.json
+```
+
+The second command rescores the cached detections with another ball tracker in seconds, without running the model again; add `--frames` to keep its per-frame rows. `--ball-bundle models/<bundle>` scores a fine-tuned single-class ball bundle instead of the COCO detector.
+
+Hit and bounce candidates, and cut and court stability, have their own benchmarks on the same dataset and split:
+
+```sh
+.venv/bin/python -m tennis_ai.event_benchmark scene data/public/tracknet/extracted/Dataset --output outputs/event-public/scene.jsonl
+.venv/bin/python -m tennis_ai.event_benchmark score outputs/event-public/scene.jsonl --dataset data/public/tracknet/extracted/Dataset --ball truth --event-detector baseline-v1 --output outputs/event-public/baseline.truth.json
+.venv/bin/python -m tennis_ai.event_model train outputs/event-public/scene.jsonl --dataset data/public/tracknet/extracted/Dataset --ball outputs/ball-public/tracknet-v2.frames.jsonl --output outputs/event-public/learned-events.pt
+.venv/bin/python -m tennis_ai.event_benchmark score outputs/event-public/scene.jsonl --ball outputs/ball-public/yolo-coco.static-reject-v1.frames.jsonl --event-detector learned --weights outputs/event-public/learned-events.pt --output outputs/event-public/learned.yolo.json
+.venv/bin/python -m tennis_ai.scene_benchmark data/public/tracknet/extracted/Dataset --cache outputs/scene-public/cache --output outputs/scene-public/report.json
+```
+
+To use the learned model in an analysis, copy the trained file to `models/learned-events-v1.pt` and add `--event-detector learned-events-v1`; the run records its checksum. `--auto-links auto-v1` adds a candidate landing to each automatic bounce (the observed ball at the bounce frame through that frame's court fit) and links each hit to the next bounce in the same scene before the following hit. Both are unreviewed candidates, so they appear only in the assisted view of the Tactics tab and in `shots --view assisted`.
+
+`scene` caches players, poses, rackets and court geometry once (slow); scoring then takes seconds. `--ball truth` feeds the labelled ball to isolate the event logic. The learned model (`learned-events-v1`) trains on games 1–6 and picks thresholds on 7–8; its weights stay local because the dataset has no licence.
 
 An analysis folder contains:
 
@@ -91,7 +123,7 @@ uv build --wheel --out-dir colab_delivery
 - **Ball:** pretrained sports-ball class until a custom single-class YOLO26s bundle is selected. A motion/position gate chooses one ball; stationary spare balls and tiny far-court balls remain difficult.
 - **Court:** 14 keypoints from the original 15-channel heatmap model, RANSAC geometry fit, recalibration at least once per second and after camera movement/cuts. Manual geometry is available when the model cannot fit.
 - **Ball gaps:** only gaps bounded by observations within 100 ms, within one scene, are interpolated. Hollow yellow dots mean inferred points; unknown intervals are never joined.
-- **Events and miniature court:** ground-contact estimates from ankles or box bottoms. An airborne ball is not projected as a landing point. Heuristic candidates propose hits, bounces and rallies without verified accuracy. Five stroke labels can be assigned manually; automatic strokes remain `unknown`. Only confirmed ground-contact locations appear in landing statistics. Scoring, measured ball speed and coaching diagnosis are not implemented.
+- **Events and miniature court:** ground-contact estimates from ankles or box bottoms. An airborne ball is not projected as a landing point. Heuristic candidates propose hits, bounces and rallies without verified accuracy. Five stroke labels can be assigned manually; automatic strokes remain `unknown` unless the opt-in `stroke-v1` candidates are selected. Only confirmed ground-contact locations appear in landing statistics. Scoring, measured ball speed and coaching diagnosis are not implemented.
 - **Video:** each decoded frame is processed, source presentation timestamps are normalized to start at zero and preserved to 1/90,000 second resolution in output. Audio is re-encoded, not bit-identical. Original orientation should be baked into pixels; rotated phone video is handled as described in the validation report. Full-court views are the target; cut detection is heuristic and can miss dissolves or rapid pans.
 
 ## Accuracy evaluation
@@ -114,15 +146,51 @@ A quick way to measure hit and spin candidates on your own short clips. Analyze 
 .venv/bin/python scripts/contact_labels.py template labels.csv 1 2 3
 ```
 
-Watch each clip **without the overlays** and add one row per racket contact: `clip`, `time_s` (contact time in seconds), `side` (`near` or `far`), `spin` (`topspin`, `slice`, `flat` or blank) and an optional note. Every listed clip is treated as fully labelled, so a clip with no rows has no hits. Then score the cached analyses:
+Watch each clip **without the overlays** and add one row per racket contact: `clip`, `time_s` (contact time in seconds), `side` (`near` or `far`), `stroke` (`serve`, `forehand`, `backhand`, `volley`, `overhead` or blank), `spin` (`topspin`, `slice`, `flat` or blank) and an optional note. Older sheets without a `stroke` column still work. Every listed clip is treated as fully labelled, so a clip with no rows has no hits. Then score the cached analyses:
 
 ```sh
-.venv/bin/python scripts/contact_labels.py score labels.csv outputs --spin-detector wrist-v1
+.venv/bin/python scripts/contact_labels.py score labels.csv outputs --stroke-detector stroke-v1 --spin-detector wrist-v1
 ```
 
-The report gives hit precision and recall at 0.1 s and 0.2 s for `baseline-v1` and `contact-v2`, and how often `wrist-v1` spin candidates agree with your labelled spins on matched hits (`correct`, `wrong` or `abstained`). This is a development check on your clips, not the frozen match-level benchmark in [EVALUATION_PROTOCOL.md](EVALUATION_PROTOCOL.md).
+The report gives hit precision and recall at 0.1 s and 0.2 s for `baseline-v1` and `contact-v2`, and how often the stroke and spin candidates agree with your labels on matched hits (`correct`, `wrong` or `abstained`). `technique_on_matched_hits` scores the forehand/backhand × topspin/slice/flat pair, such as a backhand slice, and `technique_confusion` lists which pairs were mistaken for which. `stroke_classification` gives per-class precision, recall and F1 for serve, forehand and backhand, and their macro F1; an abstention counts as a miss. The stroke-classification gate in the scouting plan is a macro F1 of at least 0.80 on human labels from matches that were never used to tune the rules. This is a development check on your clips, not the frozen match-level benchmark in [EVALUATION_PROTOCOL.md](EVALUATION_PROTOCOL.md).
 
 `--spin-detector wrist-v1` on `analyze` adds the same unvalidated spin candidates to automatic hits. It reads the hitter's wrist height relative to the shoulder line around contact: high to low suggests slice, low to high topspin. Serves, overheads and unclear swings stay `unknown`, and reviewed or manual hits are never changed.
+
+`--stroke-detector stroke-v1` on `analyze` (or **Stroke type candidates** in the desktop app) suggests a stroke for automatic hits:
+
+- `serve`: a wrist far above the shoulders at the opening hit, away from the net
+- `volley`: within 6.9 m of the net with no bounce candidate since the opponent's shot
+- `forehand` / `backhand`: the side where the incoming ball passes the player, checked against the swing direction
+- `unknown`: weak or contradicting cues, and overheads that are not an opening hit
+
+It assumes right-handed players, so a left-handed player's forehands and backhands come out swapped. Review reports count each forehand/backhand × topspin/slice/flat pair as `technique.<stroke>.<spin>`. Like every candidate, these enter human-verified statistics only after review.
+
+## Blind labels for a held-out broadcast
+
+The promotion gates for hits, bounces, landings and strokes need human labels from a
+broadcast that no rule or model was tuned on. `heldout_labels` keeps those labels blind:
+segments come only from the main-camera view test and cuts, and the labelling page shows
+raw frames without overlays or candidates.
+
+```sh
+.venv/bin/python -m tennis_ai.heldout_labels init outputs/<analysis> --labels outputs/labels/<match>
+.venv/bin/python -m tennis_ai.heldout_labels app outputs/labels/<match>
+```
+
+On the page (http://127.0.0.1:7861), pick a segment and step through its frames. Save a
+**hit** at the contact frame with the player's side and stroke. Save a **bounce** at the
+ground-contact frame after clicking the ball. When every hit and bounce of a segment is
+saved, tick **Segment fully labelled**. Do not open the automatic events of that video
+while labelling. Only complete segments are scored, and they count as exhaustive:
+
+```sh
+.venv/bin/python -m tennis_ai.heldout_labels score outputs/labels/<match> --output outputs/labels/<match>/report.json
+```
+
+The report gives hit and bounce precision and recall at ±2 and ±4 frames (at 30 fps), the
+landing error in metres (both the labelled pixel and the candidate landing go through the
+automatic court fit, so court error is included), and the stroke macro F1 on matched hits.
+`--events` scores another events file, such as one regenerated with a different detector.
 
 ## Shot paths and tendencies
 

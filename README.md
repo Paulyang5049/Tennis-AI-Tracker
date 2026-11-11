@@ -83,7 +83,7 @@ Filters you can combine: `role` (serve, return, rally), `stroke`, `spin`, `serve
 | Synchronized replay, exact-frame review and clip export with audio | ✅ Works |
 | Pause and resume long analyses; portable analysis folders | ✅ Works |
 | Hit, bounce and rally candidates | 🧪 Experimental. Review before they count; try `--event-detector contact-v2` |
-| Stroke type (serve, forehand, backhand, volley, overhead) and spin (topspin, slice, flat) | ✍️ Manual labels; 🧪 opt-in slice/topspin candidates with `--spin-detector wrist-v1` |
+| Stroke type (serve, forehand, backhand, volley, overhead) and spin (topspin, slice, flat) | ✍️ Manual labels; 🧪 opt-in candidates: `--stroke-detector stroke-v1` (serve, forehand, backhand, volley) and `--spin-detector wrist-v1` (slice/topspin) |
 | Accuracy on labelled broadcast footage | 🔜 Waiting for labelled matches. [Help wanted](#help-build-it) |
 | Native iPhone app and phone-camera capture | ⏸️ Paused. The source is kept in [ios/](ios/README.md) |
 
@@ -138,13 +138,13 @@ Coverage shows whether an estimate exists, not whether it is correct. No labelle
 | Stage | What | State |
 |---|---|---|
 | Foundation | Local analysis, replay, exact-frame review, portable packages, resume, clip export | ✅ Done |
-| Candidates | Gap-tolerant hits (`contact-v2`), spin candidates, opt-in TrackNet ball model | 🧪 Experimental |
+| Candidates | Gap-tolerant hits (`contact-v2`), stroke and spin candidates, opt-in TrackNet ball model, `static-reject-v1` ball selector | 🧪 Experimental |
 | Shot paths | 2D shot paths, tendency queries and court maps | 🆕 First version |
-| Broadcast handling | Skip replays and close-ups; follow camera pans | ⏳ Next |
-| Bounce and hit models | Replace the heuristics, link hits to bounces automatically | ⏳ Needs labels |
-| Ball tracker fine-tuning | Fine-tune TrackNet on broadcast tennis, compare with other open models | ⏳ Needs labels |
-| Stroke classification | Forehand, backhand and serve from pose | ⏳ Planned |
-| Scouting page | Filters, court map and clip replay inside the desktop app | ⏳ Planned |
+| Broadcast handling | Main-view filter, cut test for similar shots, smoothed court calibration | 🧪 Opt-in, measured on public clips |
+| Bounce and hit models | Learned hit/bounce candidates and automatic hit → bounce links | 🧪 Opt-in; landing gate not yet passed |
+| Ball tracker fine-tuning | Game-split public benchmark; a first fine-tune did not beat the best clean detector on the test games | 🧪 Benchmark ready; needs more matches |
+| Stroke classification | `stroke-v1` candidates and a macro-F1 gate measure | 🧪 Opt-in; needs human labels |
+| Scouting page | Tactics tab: filters, shot map, clip per shot, scouting report export | 🆕 First version |
 | 3D extras | Ball speed and net clearance from a physics fit | 💤 Later |
 | Custom models | After the foundation: see the [model research note](docs/research/2026-11-10-model-landscape.md) | 💤 Long term |
 

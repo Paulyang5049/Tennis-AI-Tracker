@@ -200,7 +200,7 @@ public struct EvidenceBundle: Codable, Equatable, Sendable {
             }
             try Self.require(event.kind == .hit || (event.contactPointImagePx == nil && event.hitterPositionCourtM == nil), "Contact observations belong to hit events")
             for value in (event.fieldConfidence ?? [:]).values { try Self.confidence(value) }
-            if event.position != nil { try Self.require(["reviewed_bounce", "legacy_v2"].contains(event.positionSource ?? ""), "Landing requires bounce provenance") }
+            if event.position != nil { try Self.require(["reviewed_bounce", "automatic_bounce", "legacy_v2"].contains(event.positionSource ?? ""), "Landing requires bounce provenance") }
             if let id = event.participantId {
                 try Self.require(people[id] != nil, "Broken participant reference")
                 let matches = assignments.filter { $0.scene == event.scene && $0.trackId == event.playerId && $0.start <= event.start && event.start < $0.end && $0.participantId == id }

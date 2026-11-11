@@ -10,8 +10,21 @@ from pathlib import Path
 
 from tennis_ai import jobs
 from tennis_ai.artifacts import sha256
-from tennis_ai.events import SPIN_DETECTORS, create_event_detector
-from tennis_ai.geometry import associate_rackets, attach_poses, calibrate, ground_point, project
+from tennis_ai.events import (
+    AUTO_LINKS,
+    LEARNED_DETECTOR,
+    SPIN_DETECTORS,
+    STROKE_DETECTORS,
+    create_event_detector,
+)
+from tennis_ai.geometry import (
+    CourtSmoother,
+    associate_rackets,
+    attach_poses,
+    calibrate,
+    ground_point,
+    project,
+)
 from tennis_ai.models import BALL_MODELS, Models
 from tennis_ai.package import (
     atomic_json,
@@ -23,8 +36,9 @@ from tennis_ai.package import (
 from tennis_ai.player_tracking import SceneRoles
 from tennis_ai.quality import quality_for_record, sharpness, summarize_quality
 from tennis_ai.render import Renderer
-from tennis_ai.tracking import SceneMonitor, create_ball_tracker, interpolate
+from tennis_ai.tracking import CUT_DETECTORS, SceneMonitor, create_ball_tracker, interpolate
 from tennis_ai.video import Cancelled, VideoWriter, decode, mux_audio, probe
+from tennis_ai.views import VIEW_FILTERS
 
 
 @dataclass
@@ -39,6 +53,12 @@ class Settings:
     spin_detector: str | None = None
     ball_model: str = "yolo-coco"
     pose_stride: int = 1
+    view_filter: str | None = None
+    # Opt-in broadcast scene handling: histogram cut test plus court smoothing.
+    broadcast_scene: str | None = None
+    stroke_detector: str | None = None
+    # Opt-in candidate landings for automatic bounces plus hit -> bounce links (v3).
+    auto_links: str | None = None
 
     def __post_init__(self):
         if self.players not in (2, 4):
@@ -49,6 +69,14 @@ class Settings:
         create_event_detector(self.event_detector)
         if self.spin_detector not in (None, *SPIN_DETECTORS):
             raise ValueError("Unsupported spin detector version")
+        if self.broadcast_scene not in (None, CourtSmoother.version):
+            raise ValueError("Unsupported broadcast scene handling")
+        if self.view_filter not in (None, *VIEW_FILTERS):
+            raise ValueError("Unsupported view filter")
+        if self.auto_links not in (None, *AUTO_LINKS):
+            raise ValueError("Unsupported automatic link version")
+        if self.stroke_detector not in (None, *STROKE_DETECTORS):
+            raise ValueError("Unsupported stroke detector version")
         if self.ball_model not in BALL_MODELS:
             raise ValueError("Unsupported ball model")
         if self.ball_model != "yolo-coco" and self.ball_bundle:
@@ -124,6 +152,18 @@ def fingerprints(root, settings, model_factory):
     return result
 
 
+def event_model(root, settings):
+    """Local weights for the learned event detector, checked before inference starts."""
+    if settings.event_detector != LEARNED_DETECTOR:
+        return None
+    path = Path(root) / "models" / f"{LEARNED_DETECTOR}.pt"
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"{LEARNED_DETECTOR} needs {path}; train it with python -m tennis_ai.event_model"
+        )
+    return {"path": str(path.resolve()), "sha256": sha256(path)}
+
+
 def load_summary(folder):
     folder = Path(folder)
     summary = json.loads((folder / "summary.json").read_text())
@@ -176,7 +216,10 @@ def _analyze(
     # Event candidates are derived after inference, so the detector choice does not
     # invalidate cached predictions or block resuming an older interrupted run.
     inference_settings = {
-        k: v for k, v in asdict(settings).items() if k not in ("event_detector", "spin_detector")
+        k: v
+        for k, v in asdict(settings).items()
+        if k
+        not in ("event_detector", "spin_detector", "stroke_detector", "view_filter", "auto_links")
     }
     identity = {
         "source_sha256": sha256(source),
@@ -217,6 +260,7 @@ def _analyze(
                 "source_sha256": identity["source_sha256"],
                 "video": metadata,
                 "settings": asdict(settings),
+                "event_model": event_model(root, settings),
                 "versions": versions,
             }
             jobs.save(connection, "identity", identity)
@@ -245,7 +289,10 @@ def _analyze(
             **extra,
         )
         ball_tracker = create_ball_tracker(settings.ball_tracker, settings.overlay_masks)
-        scene_monitor = SceneMonitor()
+        broadcast = settings.broadcast_scene in CUT_DETECTORS
+        scene_monitor = SceneMonitor(settings.broadcast_scene or "baseline-v1")
+        smoother = CourtSmoother() if broadcast else None
+        interval = 0.5 if broadcast else 1.0
         scene, court, last_calibration, last_frame = 0, None, -10.0, -1
         if checkpoint:
             import numpy as np
@@ -259,6 +306,8 @@ def _analyze(
             scene_monitor.previous = np.asarray(previous, dtype=np.uint8) if previous else None
             scene, court = checkpoint["scene"], checkpoint["court"]
             last_calibration, last_frame = checkpoint["last_calibration"], checkpoint["frame"]
+            if smoother is not None:
+                smoother.restore(checkpoint.get("court_smoother") or {})
 
         def capture(index, timestamp, model):
             return {
@@ -269,6 +318,7 @@ def _analyze(
                 "last_calibration": last_calibration,
                 "ball_history": list(ball_tracker.history),
                 "ball_tracker": ball_tracker.snapshot(),
+                "court_smoother": smoother.snapshot() if smoother is not None else None,
                 "previous_image": scene_monitor.previous.tolist()
                 if scene_monitor.previous is not None
                 else None,
@@ -288,9 +338,13 @@ def _analyze(
                 models.reset()
                 ball_tracker.reset()
                 court = None
-            if cut or moving or timestamp - last_calibration >= 1.0:
+            if cut or moving or timestamp - last_calibration >= interval:
                 court = models.court_geometry(frame)
-                last_calibration = timestamp
+                if smoother is not None:
+                    court = smoother.update(court, timestamp, cut, moving)
+                if not (court and court.get("held")):
+                    # A held court keeps its real age; the next frame retries the fit.
+                    last_calibration = timestamp
             if settings.pose_stride == 1:
                 players, rackets, balls, poses = models.infer(frame, court)
             else:
@@ -498,8 +552,15 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
 
         detector = summary["settings"].get("event_detector", "baseline-v1")
         spin_detector = summary["settings"].get("spin_detector")
+        view_filter = summary["settings"].get("view_filter")
+        stroke_detector = summary["settings"].get("stroke_detector")
+        auto_links = summary["settings"].get("auto_links")
+        learned = {
+            "weights": (summary.get("event_model") or {}).get("path"),
+            "width": summary["video"]["width"],
+        }
         if manifest and manifest["schema_version"] == 3:
-            from tennis_ai.events import generate_candidates
+            from tennis_ai.events import candidate_events
             from tennis_ai.evidence import load_evidence, persist_frame_tracks, validate_evidence
 
             # Rendering overlays does not replace the versioned review graph.
@@ -509,21 +570,21 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
                 and not bundle["events"]["events"]
                 and not bundle["audit"]
             ):
-                with relative_asset(output, artifacts["frames"]).open() as stream:
-                    bundle["events"]["events"] = list(
-                        generate_candidates(
-                            (json.loads(line) for line in stream if line.strip()), detector
-                        )
-                    )
-                if spin_detector:
-                    from tennis_ai.events import annotate_spin
+                bundle["events"]["events"] = candidate_events(
+                    relative_asset(output, artifacts["frames"]),
+                    detector,
+                    spin_detector,
+                    stroke_detector,
+                    view_filter,
+                    auto_links=auto_links,
+                    **learned,
+                )
+                if auto_links:
+                    from tennis_ai.events import propose_links
 
-                    with relative_asset(output, artifacts["frames"]).open() as stream:
-                        bundle["events"]["events"] = annotate_spin(
-                            bundle["events"]["events"],
-                            (json.loads(line) for line in stream if line.strip()),
-                            spin_detector,
-                        )
+                    bundle["events"]["links"] = propose_links(
+                        bundle["events"]["events"], bundle["events"]["links"]
+                    )
                 validate_evidence(bundle, manifest["media"]["duration"])
                 atomic_json(relative_asset(output, artifacts["events"]), bundle["events"])
             with relative_asset(output, artifacts["frames"]).open() as stream:
@@ -537,6 +598,9 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
                 corrections_path,
                 detector,
                 spin_detector,
+                stroke_detector,
+                view_filter,
+                **learned,
             )
         with relative_asset(output, artifacts["frames"]).open() as stream:
             summary["capture_quality"] = summarize_quality(

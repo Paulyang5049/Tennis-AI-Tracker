@@ -14,13 +14,35 @@ evidence. They are Python-only, add no measured facts, and have been tested on s
 bundles and the shared v3 fixture only; no reviewed real match has been run through them.
 See the [scouting plan](plans/2026-11-10-feat-shot-pattern-scouting-plan.md).
 
+Added 2026-11-11: an opt-in `--view-filter main-view-v1` that ignores broadcast frames
+without a court calibration when finding event candidates, and
+`python -m tennis_ai.ball_benchmark`, which scores ball detectors on the public TrackNet
+dataset split by game. Both are development evidence only; results and their limits are in
+[VALIDATION.md](../VALIDATION.md). An opt-in ball selector, `static-reject-v1`, drops
+detections that stay in one place. No ball or event model has been promoted.
+
+Also added 2026-11-11, all opt-in and development evidence only:
+
+- `tennis_ai.event_benchmark` and `learned-events-v1`: hit/bounce candidates trained on the
+  public games 1–6; `--event-detector learned-events-v1` (local weights) and
+  `--auto-links auto-v1` (candidate bounce landings and hit → bounce links for the assisted
+  view). The plan's landing gate is not passed.
+- `tennis_ai.scene_benchmark` and `--broadcast-scene broadcast-v1` (cut test for similar
+  shots, court smoothing).
+- Desktop **Tactics** tab with a scouting report export.
+- `stroke-v1` stroke candidates (merged from the stroke-candidates branch) and a macro-F1
+  stroke measure in `scripts/contact_labels.py`; the stroke gate needs human labels.
+- `ball_benchmark --ball-bundle` and a game-split YOLO ball dataset builder for local
+  fine-tuning.
+
 ## Implemented and locally exercised
 
 - Self-contained analysis folders, legacy export, source integrity checks and relative paths.
 - Atomic SQLite prediction/tracker checkpoints, explicit resume identity checks and timestamp seek.
 - Saved-match browser, exact-frame review, event corrections, reviewed-only statistics and audio clip export.
 - Explicit ball/absence annotations, event coverage intervals and match-isolated benchmark reports.
-- Candidate hits/bounces/rallies. All automatic strokes remain unknown; manual labels cover five strokes.
+- Candidate hits/bounces/rallies. Automatic strokes remain unknown unless the opt-in, unvalidated
+  `stroke-v1` rule suggests serve, forehand, backhand or volley; manual labels cover five strokes.
 - Isolated, hash-locked Core ML conversion with verified tensor shape and package digest.
 - Explicit v2-to-v3 save-as, shared evidence fixtures, separate participant/assignment/link
   contracts, durable event correction audit and invalidated derived claims after review edits.

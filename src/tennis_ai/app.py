@@ -93,6 +93,8 @@ def create_app(root):
         resume=False,
         ball_tracker="baseline-v1",
         event_detector="baseline-v1",
+        stroke_detector=None,
+        spin_detector=None,
     ):
         if not current and not video:
             raise gr.Error("Choose a recording before starting analysis.")
@@ -133,6 +135,8 @@ def create_app(root):
                             (court or "").strip() or None,
                             ball_tracker=ball_tracker,
                             event_detector=event_detector,
+                            stroke_detector=stroke_detector,
+                            spin_detector=spin_detector,
                         ),
                         job["cancel"],
                         update,
@@ -367,6 +371,96 @@ def create_app(root):
             'fill="none" stroke="white"/>' + circles + "</svg>"
         )
 
+    def shot_document(folder, view, hands):
+        if not folder:
+            raise gr.Error("Open an analysis first")
+        from tennis_ai.evidence import load_evidence
+        from tennis_ai.shots import derive_shots
+
+        try:
+            handedness = dict(
+                item.strip().partition("=")[::2]
+                for item in (hands or "").split(",")
+                if item.strip()
+            )
+            return derive_shots(load_evidence(folder), view=view, handedness=handedness)
+        except (KeyError, FileNotFoundError) as error:
+            raise gr.Error("This analysis has no v3 evidence package yet") from error
+        except ValueError as error:
+            raise gr.Error(str(error)) from error
+
+    def tactic_players(folder):
+        if not folder:
+            return gr.update(choices=[], value=None)
+        from tennis_ai.evidence import load_evidence
+
+        try:
+            people = load_evidence(folder)["events"]["participants"]
+        except (KeyError, FileNotFoundError):
+            return gr.update(choices=[], value=None)
+        choices = [(f"{p['name']} ({p['role']})", p["id"]) for p in people]
+        return gr.update(choices=choices, value=choices[0][1] if choices else None)
+
+    def show_tendency(folder, view, player, hands, role, stroke, side, in_side, in_dir, support):
+        from tennis_ai.tactics import court_map, tendency
+
+        document = shot_document(folder, view, hands)
+        where = {k: v for k, v in (("role", role), ("stroke", stroke)) if v != "any"}
+        if side != "any":
+            where["serve_side"] = side
+        incoming = {k: v for k, v in (("serve_side", in_side), ("direction", in_dir)) if v != "any"}
+        result = tendency(
+            document,
+            participant_id=player,
+            where=where,
+            incoming=incoming,
+            min_support=int(support or 8),
+        )
+        image = cv2.cvtColor(court_map(result, str(player or "all players")), cv2.COLOR_BGR2RGB)
+        lines = [
+            f"**{result['sample_count']} shots** · support: {result['support']} · "
+            f"view: {result['view']} · derived from linked hits and bounces, not measured accuracy"
+        ]
+        for axis, rows in result["distributions"].items():
+            parts = ", ".join(f"{r['value']} {r['count']} ({r['share']:.0%})" for r in rows)
+            lines.append(f"- {axis}: {parts or 'none'}")
+        if result["exclusions"]:
+            lines.append(f"- left out without a landing: {len(result['exclusions'])}")
+        shots = {s["id"]: s for s in document["shots"]}
+        table = [
+            [
+                p["shot_id"],
+                round(p["start"], 2),
+                shots[p["shot_id"]]["stroke"],
+                p["direction"] or "-",
+                shots[p["shot_id"]]["depth"] or "-",
+                "yes" if shots[p["shot_id"]]["reviewed"] else "no",
+            ]
+            for p in result["points"]
+        ]
+        return image, "\n".join(lines), table
+
+    def shot_clip(folder, table, event: gr.SelectData):
+        rows = table.values.tolist() if hasattr(table, "values") else table
+        if not folder or not rows:
+            raise gr.Error("Show a tendency first")
+        start = float(rows[event.index[0]][1])
+        return str(export_event_clip(folder, start, start))
+
+    def scouting_export(folder, view, player, hands, support):
+        from tennis_ai.package import atomic_json
+        from tennis_ai.tactics import report_markdown, scouting_report
+
+        if not player:
+            raise gr.Error("Choose a player")
+        report = scouting_report(shot_document(folder, view, hands), player, int(support or 8))
+        target = Path(folder) / "reports"
+        target.mkdir(exist_ok=True)
+        stem = target / f"scouting-{player}-{view}"
+        atomic_json(stem.with_suffix(".json"), report)
+        stem.with_suffix(".md").write_text(report_markdown(report))
+        return [str(stem.with_suffix(".md")), str(stem.with_suffix(".json"))]
+
     def label_point(event: gr.SelectData):
         return event.index[0], event.index[1]
 
@@ -552,6 +646,88 @@ def create_app(root):
                         make_clip, [folder_state, event_start, event_end], clip_download
                     )
 
+            with gr.Tab("Tactics", id="tactics", render_children=True):
+                gr.Markdown(
+                    "## Where do they hit it?\nShot paths join the hitter's court position to a "
+                    "linked bounce. The assisted view includes unreviewed candidates; the "
+                    "human-verified view uses reviewed evidence only.",
+                    elem_classes="section-intro",
+                )
+                with gr.Row():
+                    tactic_view = gr.Radio(
+                        ["assisted", "human_verified"], value="assisted", label="View"
+                    )
+                    tactic_player: Any = gr.Dropdown(choices=[], label="Player")
+                    tactic_hands = gr.Textbox(
+                        label="Handedness (optional)", placeholder="opp=right, me=left"
+                    )
+                    tactic_support = gr.Number(value=8, precision=0, label="Minimum support")
+                with gr.Row():
+                    tactic_role = gr.Dropdown(
+                        ["any", "serve", "return", "rally"], value="any", label="Shot"
+                    )
+                    tactic_stroke = gr.Dropdown(
+                        ["any", "forehand", "backhand", "volley", "serve"],
+                        value="any",
+                        label="Stroke",
+                    )
+                    tactic_side = gr.Dropdown(
+                        ["any", "deuce", "ad"], value="any", label="Serve side"
+                    )
+                    tactic_in_side = gr.Dropdown(
+                        ["any", "deuce", "ad"], value="any", label="Incoming serve side"
+                    )
+                    tactic_in_dir = gr.Dropdown(
+                        ["any", "t", "body", "wide", "cross_court", "down_the_line", "middle"],
+                        value="any",
+                        label="Incoming direction",
+                    )
+                with gr.Row():
+                    load_players: Any = gr.Button("Load players")
+                    show_tactics: Any = gr.Button("Show tendency", variant="primary")
+                    export_scouting: Any = gr.Button("Export scouting report")
+                with gr.Row():
+                    tactic_map = gr.Image(label="Shot map · hitter at the bottom", type="numpy")
+                    with gr.Column():
+                        tactic_summary = gr.Markdown()
+                        tactic_table: Any = gr.Dataframe(
+                            headers=[
+                                "shot",
+                                "time (s)",
+                                "stroke",
+                                "direction",
+                                "depth",
+                                "reviewed",
+                            ],
+                            label="Shots · select a row to export its clip",
+                            interactive=False,
+                        )
+                tactic_clip = gr.Video(label="Selected shot", interactive=False)
+                scouting_files = gr.File(label="Scouting report", file_count="multiple")
+                load_players.click(tactic_players, folder_state, tactic_player)
+                show_tactics.click(
+                    show_tendency,
+                    [
+                        folder_state,
+                        tactic_view,
+                        tactic_player,
+                        tactic_hands,
+                        tactic_role,
+                        tactic_stroke,
+                        tactic_side,
+                        tactic_in_side,
+                        tactic_in_dir,
+                        tactic_support,
+                    ],
+                    [tactic_map, tactic_summary, tactic_table],
+                )
+                tactic_table.select(shot_clip, [folder_state, tactic_table], tactic_clip)
+                export_scouting.click(
+                    scouting_export,
+                    [folder_state, tactic_view, tactic_player, tactic_hands, tactic_support],
+                    scouting_files,
+                )
+
             with gr.Tab("Settings", id="settings", render_children=True):
                 gr.Markdown(
                     "## Fine-tune your review\nLabel inspected frames or adjust local model settings. Your predictions stay intact.",
@@ -623,16 +799,31 @@ def create_app(root):
                         ["auto", "mps", "cpu", "cuda"], value="auto", label="Processing device"
                     )
                     ball_tracker = gr.Dropdown(
-                        ["baseline-v1", "experimental-motion-v1"],
+                        ["baseline-v1", "experimental-motion-v1", "static-reject-v1"],
                         value="baseline-v1",
                         label="Ball tracker",
-                        info="experimental-motion-v1 is experimental and unvalidated",
+                        info="Others are opt-in: static-reject-v1 drops detections that stay "
+                        "in one place (broadcast graphics); see VALIDATION.md",
                     )
                     event_detector = gr.Dropdown(
                         ["baseline-v1", "contact-v2"],
                         value="baseline-v1",
                         label="Hit candidate detector",
                         info="contact-v2 tolerates missing ball frames at contact; "
+                        "experimental and unvalidated",
+                    )
+                    stroke_detector = gr.Dropdown(
+                        [("Off", ""), ("stroke-v1", "stroke-v1")],
+                        value="",
+                        label="Stroke type candidates",
+                        info="Suggests serve, forehand, backhand or volley for automatic hits, "
+                        "assuming right-handed players; experimental and unvalidated",
+                    )
+                    spin_detector = gr.Dropdown(
+                        [("Off", ""), ("wrist-v1", "wrist-v1")],
+                        value="",
+                        label="Spin candidates",
+                        info="Suggests topspin or slice from the wrist path; "
                         "experimental and unvalidated",
                     )
                 with gr.Accordion("Custom Colab model bundles", open=False):
@@ -670,8 +861,28 @@ def create_app(root):
             [job_state, status],
         )
         run.click(
-            lambda v, m, d, b, c, t, e: start(v, m, d, b, c, ball_tracker=t, event_detector=e),
-            [video, mode, device, ball, court, ball_tracker, event_detector],
+            lambda v, m, d, b, c, t, e, s, p: start(
+                v,
+                m,
+                d,
+                b,
+                c,
+                ball_tracker=t,
+                event_detector=e,
+                stroke_detector=s or None,
+                spin_detector=p or None,
+            ),
+            [
+                video,
+                mode,
+                device,
+                ball,
+                court,
+                ball_tracker,
+                event_detector,
+                stroke_detector,
+                spin_detector,
+            ],
             [job_state, status],
         )
         stop.click(cancel, job_state, status, queue=False)

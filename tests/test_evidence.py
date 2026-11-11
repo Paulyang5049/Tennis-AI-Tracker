@@ -204,6 +204,16 @@ def test_shared_v3_fixtures(name):
     validate_evidence(bundle, 5)
 
 
+def test_automatic_bounce_landing_is_valid_candidate_evidence():
+    from tennis_ai.schema import validate_schema
+
+    bundle = deepcopy(load_evidence(FIXTURES / "full"))
+    bounce = next(e for e in bundle["events"]["events"] if e["kind"] == "bounce")
+    bounce.update(position=[4.0, 20.0], position_source="automatic_bounce")
+    validate_schema("events-v3.schema.json", bundle["events"])
+    validate_evidence(bundle, 5)
+
+
 @pytest.mark.parametrize("mutation", ["reference", "time", "nan", "mapping", "airborne"])
 def test_invalid_evidence_fails_closed(mutation):
     bundle = deepcopy(load_evidence(FIXTURES / "full"))

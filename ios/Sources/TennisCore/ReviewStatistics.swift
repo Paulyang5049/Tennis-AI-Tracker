@@ -40,7 +40,7 @@ public struct ReviewMetric: Codable, Equatable, Identifiable, Sendable {
 
 /// Calculated from one snapshot. Never uses a stored derived metric as current truth.
 public struct ReviewReport: Codable, Equatable, Sendable {
-    public var schemaVersion = 1; public var definitionVersion = "review-loop-v2"
+    public var schemaVersion = 1; public var definitionVersion = "review-loop-v3"
     public var view: EvidenceView; public var participantId: String?; public var start: Double; public var end: Double
     public var inputDigest: String; public var metrics: [ReviewMetric]
     enum CodingKeys: String, CodingKey { case schemaVersion, definitionVersion, view, participantId, start, end, inputDigest, metrics }
@@ -93,6 +93,14 @@ public struct ReviewReport: Codable, Equatable, Sendable {
             let selected = accepted.filter { ($0.spin ?? .unknown) == spin }
             var row = metric("spin." + spin.rawValue, selected, excluded, refs: hitDenominatorRefs)
             row.value = accepted.isEmpty ? nil : Double(selected.count); metrics.append(row)
+        }
+        // Technique pairs such as a backhand slice; groundstrokes only.
+        for stroke in [Stroke.forehand, .backhand] {
+            for spin in [Spin.topspin, .slice, .flat] {
+                let selected = accepted.filter { $0.stroke == stroke && $0.spin == spin }
+                var row = metric("technique.\(stroke.rawValue).\(spin.rawValue)", selected, excluded, refs: hitDenominatorRefs)
+                row.value = accepted.isEmpty ? nil : Double(selected.count); metrics.append(row)
+            }
         }
         var landings: [AnalysisEvent] = [], points: [ReviewPoint] = [], unassigned: [ReviewPoint] = [], skipped: [String: String] = [:], refs: [String] = []
         for bounce in bundle.events.events where bounce.kind == .bounce {

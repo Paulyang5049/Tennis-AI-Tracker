@@ -210,3 +210,21 @@ def test_cli_derives_from_a_shared_fixture(tmp_path):
     )
     assert json.loads(output.read_text())["sample_count"] == 1
     assert picture.stat().st_size > 1000
+
+
+def test_scouting_report_states_samples_support_and_evidence():
+    from tennis_ai.tactics import report_markdown, scouting_report
+
+    report = scouting_report(derive_shots(match()), "opp", min_support=8)
+    sections = {s["title"]: s for s in report["sections"]}
+    deuce = sections["Return of a deuce serve"]
+    assert deuce["sample_count"] == 2 and deuce["support"] == "limited"
+    assert deuce["most_common"]["direction"]["value"] == "cross_court"
+    assert deuce["shot_ids"] == ["r0", "r1"]
+    assert sections["Serve, deuce side"]["sample_count"] == 0  # opp never served here
+    assert sections["Serve, deuce side"]["most_common"]["direction"] is None
+    text = report_markdown(report)
+    assert "assisted (includes unreviewed automatic candidates)" in text
+    assert "r0, r1" in text and "limited" in text
+    verified = scouting_report(derive_shots(match(), view="human_verified"), "opp")
+    assert "human-verified" in report_markdown(verified)

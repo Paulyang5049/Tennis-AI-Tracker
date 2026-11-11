@@ -124,3 +124,74 @@ def associate_rackets(players, rackets):
             and (len(ranked) == 1 or ranked[1][0] - ranked[0][0] > 0.15)
         ):
             racket["player_id"] = ranked[0][1]
+
+
+def _from_points(points, previous):
+    """Court record whose homography maps exactly onto these 14 image points."""
+    inverse, _ = cv2.findHomography(COURT, np.asarray(points, dtype=np.float32))
+    if inverse is None or not np.isfinite(inverse).all() or abs(np.linalg.det(inverse)) < 1e-9:
+        return None
+    return {
+        **previous,
+        "matrix": np.linalg.inv(inverse).tolist(),
+        "points": project(COURT, inverse).tolist(),
+    }
+
+
+class CourtSmoother:
+    """Opt-in (broadcast-v1) temporal filter for automatic court fits within one shot.
+
+    A fit that agrees with the current court (median keypoint shift <= ``agree_px``)
+    is blended in, which removes frame-to-frame jitter on a still camera. A fit that
+    disagrees replaces the court only when the next fit confirms it, so one bad fit
+    cannot jump the court. While the camera moves every fit is taken as is. A failed
+    fit holds the last court for at most ``hold`` seconds of a still camera, and is
+    marked ``held``. A cut forgets everything. Manual calibrations pass through.
+    """
+
+    version = "broadcast-v1"
+
+    def __init__(self, alpha=0.35, agree_px=8.0, hold=2.0):
+        self.alpha, self.agree_px, self.hold = alpha, agree_px, hold
+        self.reset()
+
+    def reset(self):
+        self.court, self.pending, self.fitted_at = None, None, None
+
+    def snapshot(self):
+        return {"court": self.court, "pending": self.pending, "fitted_at": self.fitted_at}
+
+    def restore(self, state):
+        self.court, self.pending = state.get("court"), state.get("pending")
+        self.fitted_at = state.get("fitted_at")
+
+    @staticmethod
+    def shift(a, b):
+        return float(np.median(np.linalg.norm(np.subtract(a["points"], b["points"]), axis=1)))
+
+    def update(self, fit, timestamp, cut=False, moving=False):
+        if cut:
+            self.reset()
+        if fit is not None and fit.get("source") == "manual":
+            self.court, self.pending, self.fitted_at = fit, None, timestamp
+            return fit
+        if fit is None:
+            if self.court and not moving and timestamp - self.fitted_at <= self.hold:
+                return {**self.court, "held": True}
+            if moving or (self.fitted_at is not None and timestamp - self.fitted_at > self.hold):
+                self.court = None
+            return None
+        if self.court is None or moving:
+            self.court, self.pending = fit, None
+        elif self.shift(fit, self.court) <= self.agree_px:
+            blended = (1 - self.alpha) * np.asarray(self.court["points"]) + self.alpha * np.asarray(
+                fit["points"]
+            )
+            self.court = _from_points(blended, {**fit, "smoothed": True}) or fit
+            self.pending = None
+        elif self.pending is not None and self.shift(fit, self.pending) <= self.agree_px:
+            self.court, self.pending = fit, None
+        else:
+            self.pending = fit
+        self.fitted_at = timestamp
+        return self.court
