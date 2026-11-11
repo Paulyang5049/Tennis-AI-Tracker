@@ -228,6 +228,27 @@ validation, and test was scored once.
 - Court coverage did not change (≥ 0.96 in every split): the two-second hold rarely bridges
   a failed fit here.
 
+## Fine-tuning the ball bundle on TrackNet games 1–6 — 2026-11-11
+
+`ball-v0.2.0` was fine-tuned locally (Apple M4, MPS, 1280 px, batch 4, no mosaic) on every
+second frame of games 1–6, with each point label drawn as a 16-px box. Validation mAP50 on
+games 7–8 went 0.44, 0.59, 0.51, 0.43 over four epochs, so training was stopped and the
+epoch-2 weights were kept (about 55 minutes per epoch). The weights stay local: the
+dataset has no licence.
+
+| Model, with `static-reject-v1` | Train P / R (5 px) | Validation P / R | Test P / R | Test P / R (10 px) | Test candidate ceiling (5 px) |
+|---|---:|---:|---:|---:|---:|
+| `ball-v0.2.0` | 0.811 / 0.521 | 0.740 / 0.399 | 0.853 / 0.763 | 0.941 / 0.841 | 0.804 |
+| Fine-tuned (epoch 2) | 0.868 / 0.750 (trained on) | 0.757 / 0.627 (epoch chosen here) | 0.847 / 0.745 | 0.915 / 0.805 | 0.844 |
+
+- **Fine-tuning did not improve the untouched test games.** The detector finds the right
+  point more often there (ceiling 0.804 → 0.844), but the selected ball is right slightly
+  less often. The large validation gain comes from the games used to choose the epoch.
+- Validation peaked at epoch 2 and then fell while training loss kept falling: six
+  training games overfit quickly. More matches, or the hard frames (occlusion and the far
+  player), are the next lever, not more epochs.
+- `ball-v0.2.0` stays the best clean result. Nothing is promoted.
+
 ## `static-reject-v1` on a full broadcast — 2026-11-11
 
 Both selectors were replayed over the cached ball candidates and court geometry of the full

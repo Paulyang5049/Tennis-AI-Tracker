@@ -142,7 +142,7 @@ Coverage shows whether an estimate exists, not whether it is correct. No labelle
 | Shot paths | 2D shot paths, tendency queries and court maps | 🆕 First version |
 | Broadcast handling | Main-view filter, cut test for similar shots, smoothed court calibration | 🧪 Opt-in, measured on public clips |
 | Bounce and hit models | Learned hit/bounce candidates and automatic hit → bounce links | 🧪 Opt-in; landing gate not yet passed |
-| Ball tracker fine-tuning | Game-split public benchmark; fine-tuning a YOLO ball detector on it | 🔬 In progress |
+| Ball tracker fine-tuning | Game-split public benchmark; a first fine-tune did not beat the best clean detector on the test games | 🧪 Benchmark ready; needs more matches |
 | Stroke classification | `stroke-v1` candidates and a macro-F1 gate measure | 🧪 Opt-in; needs human labels |
 | Scouting page | Tactics tab: filters, shot map, clip per shot, scouting report export | 🆕 First version |
 | 3D extras | Ball speed and net clearance from a physics fit | 💤 Later |
