@@ -218,11 +218,22 @@ def interpolate(records, max_gap=0.1):
     yield from pending
 
 
+CUT_DETECTORS = ("baseline-v1", "broadcast-v1")
+
+
 class SceneMonitor:
     """Detect hard cuts and global camera movement using small grayscale frames."""
 
-    def __init__(self):
+    def __init__(self, version="baseline-v1"):
+        if version not in CUT_DETECTORS:
+            raise ValueError("Unsupported cut detector")
+        self.version = version
         self.previous = None
+
+    @staticmethod
+    def _histogram(gray):
+        histogram = cv2.calcHist([gray], [0], None, [32], [0, 256])
+        return cv2.normalize(histogram, histogram).flatten()
 
     def update(self, frame):
         gray = cv2.cvtColor(cv2.resize(frame, (160, 90)), cv2.COLOR_BGR2GRAY)
@@ -230,6 +241,13 @@ class SceneMonitor:
         if self.previous is not None:
             difference = float(np.mean(cv2.absdiff(gray, self.previous))) / 255
             cut = difference > 0.24
+            if not cut and self.version == "broadcast-v1" and difference > 0.08:
+                # Broadcast cuts between similar-looking shots (wide view to replay of the
+                # wide view) change the brightness distribution more than a pan does.
+                change = cv2.compareHist(
+                    self._histogram(self.previous), self._histogram(gray), cv2.HISTCMP_BHATTACHARYYA
+                )
+                cut = change > 0.25
             if not cut:
                 shift, response = cv2.phaseCorrelate(
                     self.previous.astype(np.float32), gray.astype(np.float32)

@@ -11,7 +11,14 @@ from pathlib import Path
 from tennis_ai import jobs
 from tennis_ai.artifacts import sha256
 from tennis_ai.events import SPIN_DETECTORS, create_event_detector
-from tennis_ai.geometry import associate_rackets, attach_poses, calibrate, ground_point, project
+from tennis_ai.geometry import (
+    CourtSmoother,
+    associate_rackets,
+    attach_poses,
+    calibrate,
+    ground_point,
+    project,
+)
 from tennis_ai.models import BALL_MODELS, Models
 from tennis_ai.package import (
     atomic_json,
@@ -23,7 +30,7 @@ from tennis_ai.package import (
 from tennis_ai.player_tracking import SceneRoles
 from tennis_ai.quality import quality_for_record, sharpness, summarize_quality
 from tennis_ai.render import Renderer
-from tennis_ai.tracking import SceneMonitor, create_ball_tracker, interpolate
+from tennis_ai.tracking import CUT_DETECTORS, SceneMonitor, create_ball_tracker, interpolate
 from tennis_ai.video import Cancelled, VideoWriter, decode, mux_audio, probe
 from tennis_ai.views import VIEW_FILTERS, event_frames
 
@@ -41,6 +48,8 @@ class Settings:
     ball_model: str = "yolo-coco"
     pose_stride: int = 1
     view_filter: str | None = None
+    # Opt-in broadcast scene handling: histogram cut test plus court smoothing.
+    broadcast_scene: str | None = None
 
     def __post_init__(self):
         if self.players not in (2, 4):
@@ -51,6 +60,8 @@ class Settings:
         create_event_detector(self.event_detector)
         if self.spin_detector not in (None, *SPIN_DETECTORS):
             raise ValueError("Unsupported spin detector version")
+        if self.broadcast_scene not in (None, CourtSmoother.version):
+            raise ValueError("Unsupported broadcast scene handling")
         if self.view_filter not in (None, *VIEW_FILTERS):
             raise ValueError("Unsupported view filter")
         if self.ball_model not in BALL_MODELS:
@@ -251,7 +262,10 @@ def _analyze(
             **extra,
         )
         ball_tracker = create_ball_tracker(settings.ball_tracker, settings.overlay_masks)
-        scene_monitor = SceneMonitor()
+        broadcast = settings.broadcast_scene in CUT_DETECTORS
+        scene_monitor = SceneMonitor(settings.broadcast_scene or "baseline-v1")
+        smoother = CourtSmoother() if broadcast else None
+        interval = 0.5 if broadcast else 1.0
         scene, court, last_calibration, last_frame = 0, None, -10.0, -1
         if checkpoint:
             import numpy as np
@@ -265,6 +279,8 @@ def _analyze(
             scene_monitor.previous = np.asarray(previous, dtype=np.uint8) if previous else None
             scene, court = checkpoint["scene"], checkpoint["court"]
             last_calibration, last_frame = checkpoint["last_calibration"], checkpoint["frame"]
+            if smoother is not None:
+                smoother.restore(checkpoint.get("court_smoother") or {})
 
         def capture(index, timestamp, model):
             return {
@@ -275,6 +291,7 @@ def _analyze(
                 "last_calibration": last_calibration,
                 "ball_history": list(ball_tracker.history),
                 "ball_tracker": ball_tracker.snapshot(),
+                "court_smoother": smoother.snapshot() if smoother is not None else None,
                 "previous_image": scene_monitor.previous.tolist()
                 if scene_monitor.previous is not None
                 else None,
@@ -294,9 +311,13 @@ def _analyze(
                 models.reset()
                 ball_tracker.reset()
                 court = None
-            if cut or moving or timestamp - last_calibration >= 1.0:
+            if cut or moving or timestamp - last_calibration >= interval:
                 court = models.court_geometry(frame)
-                last_calibration = timestamp
+                if smoother is not None:
+                    court = smoother.update(court, timestamp, cut, moving)
+                if not (court and court.get("held")):
+                    # A held court keeps its real age; the next frame retries the fit.
+                    last_calibration = timestamp
             if settings.pose_stride == 1:
                 players, rackets, balls, poses = models.infer(frame, court)
             else:

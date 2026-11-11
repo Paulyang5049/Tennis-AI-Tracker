@@ -174,3 +174,93 @@ def court_map(result, title="", scale=34, margin=70):
         label = f"{row['value']}  {row['count']}/{result['sample_count']} ({row['share']:.0%})"
         cv2.putText(image, label, (40, y), font, 0.5, white, 1, cv2.LINE_AA)
     return image
+
+
+REPORT_DEFINITION = "scouting-report-v1"
+SITUATIONS: tuple[tuple[str, dict[str, str], dict[str, str]], ...] = (
+    ("Serve, deuce side", {"role": "serve", "serve_side": "deuce"}, {}),
+    ("Serve, ad side", {"role": "serve", "serve_side": "ad"}, {}),
+    ("Return of a deuce serve", {"role": "return"}, {"serve_side": "deuce"}),
+    ("Return of an ad serve", {"role": "return"}, {"serve_side": "ad"}),
+    ("Rally forehand", {"role": "rally", "stroke": "forehand"}, {}),
+    ("Rally backhand", {"role": "rally", "stroke": "backhand"}, {}),
+)
+
+
+def scouting_report(document, participant_id, min_support=8):
+    """Pre-match tendencies for one player; every line names its sample and evidence.
+
+    Derived only: it restates `tendency` results, adds no events, and marks a
+    situation with fewer than ``min_support`` shots as limited rather than hiding it.
+    """
+    sections = []
+    for title, where, incoming in SITUATIONS:
+        result = tendency(
+            document,
+            participant_id=participant_id,
+            where=where,
+            incoming=incoming,
+            min_support=min_support,
+        )
+        top = {axis: result["distributions"][axis][:1] for axis in ("direction", "depth")}
+        sections.append(
+            {
+                "title": title,
+                "where": result["where"],
+                "incoming": result["incoming"],
+                "sample_count": result["sample_count"],
+                "support": result["support"],
+                "most_common": {
+                    axis: {k: rows[0][k] for k in ("value", "count", "share", "interval_95")}
+                    if rows
+                    else None
+                    for axis, rows in top.items()
+                },
+                "shot_ids": [p["shot_id"] for p in result["points"]],
+            }
+        )
+    return {
+        "schema_version": 1,
+        "definition_version": REPORT_DEFINITION,
+        "tendency_definition_version": DEFINITION,
+        "shots_definition_version": document["definition_version"],
+        "view": document["view"],
+        "participant_id": participant_id,
+        "min_support": min_support,
+        "sections": sections,
+    }
+
+
+def report_markdown(report):
+    view = (
+        "human-verified (reviewed evidence only)"
+        if report["view"] == "human_verified"
+        else "assisted (includes unreviewed automatic candidates)"
+    )
+    lines = [
+        f"# Scouting report: {report['participant_id']}",
+        "",
+        f"View: {view}. Derived from linked hit and bounce evidence; not measured accuracy.",
+        f"Situations with fewer than {report['min_support']} shots are marked limited.",
+        "",
+        "| Situation | Shots | Most common direction | Most common depth | Support |",
+        "|---|---:|---|---|---|",
+    ]
+
+    def cell(entry):
+        if entry is None:
+            return "-"
+        low, high = entry["interval_95"]
+        return f"{entry['value']} {entry['count']} ({entry['share']:.0%}, 95% {low:.0%}-{high:.0%})"
+
+    for section in report["sections"]:
+        common = section["most_common"]
+        lines.append(
+            f"| {section['title']} | {section['sample_count']} | {cell(common['direction'])} "
+            f"| {cell(common['depth'])} | {section['support']} |"
+        )
+    lines += ["", "## Evidence", ""]
+    for section in report["sections"]:
+        ids = ", ".join(section["shot_ids"]) or "none"
+        lines.append(f"- {section['title']}: {ids}")
+    return "\n".join(lines) + "\n"

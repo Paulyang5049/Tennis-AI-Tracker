@@ -67,6 +67,11 @@ def main():
         choices=["main-view-v1"],
         help="Broadcast video: ignore close-ups, replays and crowd shots when finding events",
     )
+    analysis.add_argument(
+        "--broadcast-scene",
+        choices=["broadcast-v1"],
+        help="Broadcast video: histogram cut test and smoothed court calibration (opt-in)",
+    )
     resume = commands.add_parser("resume", help="Continue an interrupted analysis")
     resume.add_argument("output")
     render = commands.add_parser("render")
@@ -181,6 +186,7 @@ def main():
                     ball_model=args.ball_model,
                     pose_stride=args.pose_stride,
                     view_filter=args.view_filter,
+                    broadcast_scene=args.broadcast_scene,
                 ),
                 cancel,
                 lambda f, m: print(f"{f:.0%}: {m}", flush=True),
