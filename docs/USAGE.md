@@ -165,6 +165,33 @@ The report gives hit precision and recall at 0.1 s and 0.2 s for `baseline-v1` a
 
 It assumes right-handed players, so a left-handed player's forehands and backhands come out swapped. Review reports count each forehand/backhand × topspin/slice/flat pair as `technique.<stroke>.<spin>`. Like every candidate, these enter human-verified statistics only after review.
 
+## Blind labels for a held-out broadcast
+
+The promotion gates for hits, bounces, landings and strokes need human labels from a
+broadcast that no rule or model was tuned on. `heldout_labels` keeps those labels blind:
+segments come only from the main-camera view test and cuts, and the labelling page shows
+raw frames without overlays or candidates.
+
+```sh
+.venv/bin/python -m tennis_ai.heldout_labels init outputs/<analysis> --labels outputs/labels/<match>
+.venv/bin/python -m tennis_ai.heldout_labels app outputs/labels/<match>
+```
+
+On the page (http://127.0.0.1:7861), pick a segment and step through its frames. Save a
+**hit** at the contact frame with the player's side and stroke. Save a **bounce** at the
+ground-contact frame after clicking the ball. When every hit and bounce of a segment is
+saved, tick **Segment fully labelled**. Do not open the automatic events of that video
+while labelling. Only complete segments are scored, and they count as exhaustive:
+
+```sh
+.venv/bin/python -m tennis_ai.heldout_labels score outputs/labels/<match> --output outputs/labels/<match>/report.json
+```
+
+The report gives hit and bounce precision and recall at ±2 and ±4 frames (at 30 fps), the
+landing error in metres (both the labelled pixel and the candidate landing go through the
+automatic court fit, so court error is included), and the stroke macro F1 on matched hits.
+`--events` scores another events file, such as one regenerated with a different detector.
+
 ## Shot paths and tendencies
 
 ```sh

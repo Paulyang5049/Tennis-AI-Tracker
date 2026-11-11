@@ -143,8 +143,12 @@ def _groups(rows):
     return grouped
 
 
-def train(sources, scene_rows, epochs=60, seed=0):
-    """sources: list of (ball_rows, ball) pairs. Fits on train games, thresholds on val."""
+def train(sources, scene_rows, epochs=60, seed=0, tune_on=None):
+    """sources: list of (ball_rows, ball) pairs. Fits on train games, thresholds on val.
+
+    tune_on: indices of the sources whose validation F1 picks the thresholds (default:
+    all). Tuning on a detected ball, not the labelled one, fits what the pipeline sees.
+    """
     from tennis_ai.event_benchmark import evaluate, score
 
     torch.manual_seed(seed)
@@ -170,12 +174,13 @@ def train(sources, scene_rows, epochs=60, seed=0):
             optimiser.step()
     detector = LearnedDetector(net, {"hit": 0.5, "bounce": 0.5})
     thresholds: dict[str, Any] = {}
+    tuning = [sources[i] for i in tune_on] if tune_on is not None else sources
     for kind in ("hit", "bounce"):
         best = (-1.0, 0.5)
         for threshold in np.arange(0.2, 0.95, 0.05):
             detector.thresholds = {**detector.thresholds, kind: float(threshold)}
             f1s = []
-            for ball_rows, ball in sources:
+            for ball_rows, ball in tuning:
                 val = [r for r in ball_rows if r["game"] in SPLITS["val"]]
                 evaluated = evaluate(val, scene_rows, detector, ball)
                 f1s.append(score([e[1:] for e in evaluated], 2)[kind]["f1"] or 0.0)
@@ -186,7 +191,7 @@ def train(sources, scene_rows, epochs=60, seed=0):
     return net, thresholds
 
 
-def save_model(path, net, thresholds, ball_sources=()):
+def save_model(path, net, thresholds, ball_sources=(), tuned_on=None):
     torch.save(
         {
             "version": VERSION,
@@ -196,6 +201,7 @@ def save_model(path, net, thresholds, ball_sources=()):
             "trained_on_games": list(SPLITS["train"]),
             "thresholds_from_games": list(SPLITS["val"]),
             "ball_sources": list(ball_sources),
+            "thresholds_tuned_on": list(tuned_on or ball_sources),
         },
         path,
     )
@@ -211,13 +217,22 @@ def main():
     fit.add_argument("--dataset", required=True)
     fit.add_argument("--ball", action="append", default=[], help="ball_benchmark frames JSONL")
     fit.add_argument("--epochs", type=int, default=60)
+    fit.add_argument(
+        "--tune-on",
+        type=int,
+        action="append",
+        help="Pick thresholds on this --ball file only (0 = first); repeatable",
+    )
     fit.add_argument("--output", required=True)
     args = parser.parse_args()
     scene_rows = load_jsonl(args.scene)
     sources = [(list(truth_rows(args.dataset)), "truth")]
     sources += [(load_jsonl(path), "selected") for path in args.ball]
-    net, thresholds = train(sources, scene_rows, args.epochs)
-    save_model(args.output, net, thresholds, ["labelled ball", *(Path(p).name for p in args.ball)])
+    tune_on = [i + 1 for i in args.tune_on] if args.tune_on else None
+    net, thresholds = train(sources, scene_rows, args.epochs, tune_on=tune_on)
+    names = ["labelled ball", *(Path(p).name for p in args.ball)]
+    tuned = [names[i] for i in tune_on] if tune_on else names
+    save_model(args.output, net, thresholds, names, tuned)
     print(json.dumps(thresholds))
 
 

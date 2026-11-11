@@ -181,6 +181,41 @@ Test games, ±2 frames (93 hits, 99 bounces):
   far player.
 - The weights stay local: the dataset has no licence.
 
+## Retraining the learned event model for the detected ball — 2026-11-12
+
+Goal: close the bounce-precision gap on the clean ball source (`ball-v0.2.0` +
+`static-reject-v1`, test 0.857 vs the 0.90 gate). Six variants were trained on games 1–6,
+each with three seeds, and compared only on validation games 7–8 with the clean ball;
+thresholds were picked on that ball instead of the average over all ball sources.
+
+| Variant (validation, clean ball) | Bounce F1, mean ± sd of 3 seeds | Hit F1 |
+|---|---:|---:|
+| `learned-events-v1` recipe | 0.515 ± 0.023 | 0.558 |
+| + court-coordinate features | 0.514 ± 0.053 | 0.528 |
+| + labelled ball with simulated gaps and jitter | 0.525 ± 0.007 | 0.548 |
+| + COCO + `static-reject-v1` ball as a fourth source | 0.572 ± 0.015 | 0.565 |
+| all three | 0.566 ± 0.012 | 0.527 |
+| all three, ±9-frame window | 0.543 ± 0.016 | 0.570 |
+
+The COCO-source variant was chosen and the test games were scored once per seed:
+
+| Test games, clean ball, ±2 frames | Bounce P / R | Bounce F1 | Hit P / R |
+|---|---:|---:|---:|
+| `learned-events-v1` (shipped) | 0.857 / 0.848 | 0.852 | 0.621 / 0.634 |
+| Retrained, seed 0 | 0.771 / 0.818 | 0.794 | 0.629 / 0.710 |
+| Retrained, seed 1 | 0.817 / 0.899 | 0.856 | 0.723 / 0.645 |
+| Retrained, seed 2 | 0.809 / 0.899 | 0.852 | 0.740 / 0.613 |
+
+- **No test improvement; nothing is promoted.** The validation gain did not carry over:
+  bounce F1 is the same or lower, and precision, the gate's weak point, fell on every seed.
+- Court-coordinate features did not help. The automatic court fit makes an airborne ball's
+  projection noisy, and the image-space window already carries the bounce's V shape.
+- Seeds alone move test bounce F1 by 0.06, so a single-seed difference of that size between
+  two models is not evidence. Ten broadcast games are too few to fit and choose these
+  models; the held-out broadcast labels below are the next lever.
+- `event_model train --tune-on` keeps the option to pick thresholds on one ball source. The
+  retrained weights stay local (the dataset has no licence).
+
 ## Learned events and automatic links on a full broadcast — 2026-11-11
 
 `--event-detector learned-events-v1 --auto-links auto-v1` was run over the cached frames of
