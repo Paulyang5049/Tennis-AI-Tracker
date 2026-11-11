@@ -83,7 +83,7 @@ Filters you can combine: `role` (serve, return, rally), `stroke`, `spin`, `serve
 | Synchronized replay, exact-frame review and clip export with audio | ✅ Works |
 | Pause and resume long analyses; portable analysis folders | ✅ Works |
 | Hit, bounce and rally candidates | 🧪 Experimental. Review before they count; try `--event-detector contact-v2` |
-| Stroke type (serve, forehand, backhand, volley, overhead) and spin (topspin, slice, flat) | ✍️ Manual labels; 🧪 opt-in slice/topspin candidates with `--spin-detector wrist-v1` |
+| Stroke type (serve, forehand, backhand, volley, overhead) and spin (topspin, slice, flat) | ✍️ Manual labels; 🧪 opt-in candidates: `--stroke-detector stroke-v1` (serve, forehand, backhand, volley) and `--spin-detector wrist-v1` (slice/topspin) |
 | Accuracy on labelled broadcast footage | 🔜 Waiting for labelled matches. [Help wanted](#help-build-it) |
 | Native iPhone app and phone-camera capture | ⏸️ Paused. The source is kept in [ios/](ios/README.md) |
 

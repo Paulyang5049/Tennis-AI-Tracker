@@ -84,6 +84,14 @@ The same 13 broadcast clips were analysed with `--ball-model tracknet-v2 --event
 - TrackNet analysis ran at 2.8 frames per second against 7.3 for the default, because it adds a full-resolution heatmap network per frame. It stays opt-in.
 - The run exposed that Ultralytics strips apostrophes from weight paths, so a project under a folder such as "Paul's SSD" could not load any model. Weights are now passed through an apostrophe-free link.
 
+## Stroke-type candidates on the slice clips — 2026-11-04
+
+`stroke-v1` (opt-in) was applied to the 103 `contact-v2` hit candidates of the same 13 clips, from cached frames. It suggested 42 forehands, 35 backhands, 11 serves and 2 volleys, and left 13 unknown. No human stroke labels exist, so these are development observations, not accuracy.
+
+- The coding assistant, not a coach or the player, inspected a five-frame strip from 0.3 s before to 0.3 s after every candidate and could judge 86 of them. The rule agreed on 80, left 5 unknown, and called one volley a forehand because the opponent's previous hit was more than 2 s earlier. None of the 86 received the wrong forehand, backhand or serve label. The other 17 were false hits, partly outside the frame or unclear.
+- The thresholds were chosen after viewing the same strips, so this is tuning evidence, not held-out accuracy. A first version inferred handedness from the raised wrist at a serve. It swapped the forehands and backhands of four player tracks, because the toss arm is also raised. The rule now assumes right-handed players.
+- With `wrist-v1` spin on the same hits: forehands 12 topspin, 3 slice, 27 unknown; backhands 7 topspin, 2 slice, 26 unknown. About seven hits looked like slices in the strips. `wrist-v1` called one of them slice and one topspin, and left five unknown. Of its six slice calls, one looked like a slice and one was a volley. Neither the wrist height path nor the detected racket box separated slice from topspin at this resolution, where players are about 80–250 pixels tall. Spin candidates stay unreliable until human labels exist to fit and test them.
+
 ## Main-camera view filter on a full broadcast — 2026-11-10
 
 `--view-filter main-view-v1` was applied to the cached frames of one full broadcast run (41,564 frames at 59.94 fps; footage and outputs stay outside version control). No event labels exist for this match, so these are development observations, not accuracy.

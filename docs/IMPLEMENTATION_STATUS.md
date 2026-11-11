@@ -27,7 +27,8 @@ detections that stay in one place. No ball or event model has been promoted.
 - Atomic SQLite prediction/tracker checkpoints, explicit resume identity checks and timestamp seek.
 - Saved-match browser, exact-frame review, event corrections, reviewed-only statistics and audio clip export.
 - Explicit ball/absence annotations, event coverage intervals and match-isolated benchmark reports.
-- Candidate hits/bounces/rallies. All automatic strokes remain unknown; manual labels cover five strokes.
+- Candidate hits/bounces/rallies. Automatic strokes remain unknown unless the opt-in, unvalidated
+  `stroke-v1` rule suggests serve, forehand, backhand or volley; manual labels cover five strokes.
 - Isolated, hash-locked Core ML conversion with verified tensor shape and package digest.
 - Explicit v2-to-v3 save-as, shared evidence fixtures, separate participant/assignment/link
   contracts, durable event correction audit and invalidated derived claims after review edits.

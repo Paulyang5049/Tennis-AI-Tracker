@@ -1,4 +1,4 @@
-"""Score hit and spin candidates against a player's hand-labelled contact sheet.
+"""Score hit, stroke and spin candidates against a player's hand-labelled contact sheet.
 
 Labels are written without looking at candidates. Each listed clip is treated
 as exhaustively labelled for hits, so a clip with no rows has no hits. These
@@ -12,9 +12,18 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from tennis_ai.benchmark import match_events
-from tennis_ai.events import SPINS, annotate_spin, generate_candidates, new_event
+from tennis_ai.events import (
+    SPINS,
+    STROKES,
+    annotate_spin,
+    annotate_strokes,
+    generate_candidates,
+    new_event,
+)
 
-COLUMNS = ("clip", "time_s", "side", "spin", "note")
+COLUMNS = ("clip", "time_s", "side", "stroke", "spin", "note")
+# The technique pairs a player cares about first, such as a backhand slice.
+TECHNIQUES = tuple(f"{stroke}/{spin}" for stroke in ("forehand", "backhand") for spin in SPINS)
 
 
 def write_template(path, clips):
@@ -22,7 +31,7 @@ def write_template(path, clips):
         writer = csv.writer(stream)
         writer.writerow(COLUMNS)
         for clip in clips:
-            writer.writerow([clip, "", "", "", "one row per contact; delete this row"])
+            writer.writerow([clip, "", "", "", "", "one row per contact; delete this row"])
 
 
 def read_labels(path):
@@ -34,11 +43,16 @@ def read_labels(path):
             spin = (row.get("spin") or "unknown").strip() or "unknown"
             if spin not in (*SPINS, "unknown"):
                 raise ValueError(f"Unsupported spin label: {spin}")
+            stroke = (row.get("stroke") or "unknown").strip() or "unknown"
+            if stroke not in (*STROKES, "unknown"):
+                raise ValueError(f"Unsupported stroke label: {stroke}")
             side = (row.get("side") or "").strip()
             if side not in ("", "near", "far"):
                 raise ValueError(f"Side must be near, far or blank: {side}")
             labels[row["clip"].strip()].append(
-                new_event("hit", float(row["time_s"]), spin=spin, provenance="manual")
+                new_event(
+                    "hit", float(row["time_s"]), stroke=stroke, spin=spin, provenance="manual"
+                )
             )
     return labels
 
@@ -47,17 +61,47 @@ def _rate(numerator, denominator):
     return round(numerator / denominator, 3) if denominator else None
 
 
-def score(labels, clips, frames_for, detectors, spin_detector=None, tolerances=(0.1, 0.2)):
-    """Return per-detector, per-tolerance hit counts and spin agreement on matched hits."""
+def _agreement(counter, truth, guess):
+    """Count one labelled attribute; an unknown label is not scored."""
+    if truth != "unknown":
+        counter[
+            "abstained" if guess == "unknown" else "correct" if guess == truth else "wrong"
+        ] += 1
+
+
+def _technique(event):
+    pair = f"{event['stroke']}/{event.get('spin') or 'unknown'}"
+    return pair if pair in TECHNIQUES else "unknown"
+
+
+def score(
+    labels,
+    clips,
+    frames_for,
+    detectors,
+    spin_detector=None,
+    tolerances=(0.1, 0.2),
+    stroke_detector=None,
+):
+    """Return per-detector, per-tolerance hit counts and label agreement on matched hits.
+
+    Technique scores the forehand/backhand by topspin/slice/flat pair; a matched hit
+    counts only when both labels are present in the sheet.
+    """
     report = {}
     for detector in detectors:
         rows = {}
         for tolerance in tolerances:
             tp = fp = fn = 0
             spin: Counter[str] = Counter()
+            stroke: Counter[str] = Counter()
+            technique: Counter[str] = Counter()
+            confusion: Counter[str] = Counter()
             for clip in clips:
                 frames = frames_for(clip)
                 predicted = [e for e in generate_candidates(frames, detector) if e["kind"] == "hit"]
+                if stroke_detector:
+                    predicted = annotate_strokes(predicted, frames, stroke_detector)
                 if spin_detector:
                     predicted = annotate_spin(predicted, frames, spin_detector)
                 truth = labels.get(clip, [])
@@ -68,15 +112,12 @@ def score(labels, clips, frames_for, detectors, spin_detector=None, tolerances=(
                     fn + len(truth) - len(pairs),
                 )
                 for i, j in pairs:
-                    if truth[j]["spin"] != "unknown":
-                        guess = predicted[i].get("spin") or "unknown"
-                        spin[
-                            "abstained"
-                            if guess == "unknown"
-                            else "correct"
-                            if guess == truth[j]["spin"]
-                            else "wrong"
-                        ] += 1
+                    guess, label = predicted[i], truth[j]
+                    _agreement(spin, label["spin"], guess.get("spin") or "unknown")
+                    _agreement(stroke, label["stroke"], guess["stroke"])
+                    _agreement(technique, _technique(label), _technique(guess))
+                    if _technique(label) != "unknown":
+                        confusion[f"{_technique(label)} -> {_technique(guess)}"] += 1
             rows[str(tolerance)] = {
                 "tp": tp,
                 "fp": fp,
@@ -84,6 +125,9 @@ def score(labels, clips, frames_for, detectors, spin_detector=None, tolerances=(
                 "precision": _rate(tp, tp + fp),
                 "recall": _rate(tp, tp + fn),
                 "spin_on_matched_hits": dict(spin),
+                "stroke_on_matched_hits": dict(stroke),
+                "technique_on_matched_hits": dict(technique),
+                "technique_confusion": dict(sorted(confusion.items())),
             }
         report[detector] = rows
     return report
@@ -101,6 +145,7 @@ def main():
     scoring.add_argument("--clips", nargs="+", help="Default: every clip named in the sheet")
     scoring.add_argument("--detectors", nargs="+", default=["baseline-v1", "contact-v2"])
     scoring.add_argument("--spin-detector", choices=["wrist-v1"])
+    scoring.add_argument("--stroke-detector", choices=["stroke-v1"])
     args = parser.parse_args()
     if args.command == "template":
         write_template(args.output, args.clips)
@@ -116,5 +161,15 @@ def main():
         return [json.loads(line) for line in path.open() if line.strip()]
 
     print(
-        json.dumps(score(labels, clips, frames_for, args.detectors, args.spin_detector), indent=2)
+        json.dumps(
+            score(
+                labels,
+                clips,
+                frames_for,
+                args.detectors,
+                args.spin_detector,
+                stroke_detector=args.stroke_detector,
+            ),
+            indent=2,
+        )
     )

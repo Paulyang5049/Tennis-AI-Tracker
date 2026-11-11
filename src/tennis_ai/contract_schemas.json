@@ -1014,7 +1014,8 @@
       "definition_version": {
         "enum": [
           "review-loop-v1",
-          "review-loop-v2"
+          "review-loop-v2",
+          "review-loop-v3"
         ]
       },
       "view": {

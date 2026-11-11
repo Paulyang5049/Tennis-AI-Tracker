@@ -37,6 +37,7 @@ For a different working directory, pass `--root /absolute/path/to/AI_tennis` **b
 .venv/bin/tennis-ai analyze path/to/video.mp4 --output outputs/my-match --players 4
 .venv/bin/tennis-ai analyze path/to/video.mp4 --output outputs/custom-match --ball-bundle models/ball-bundle
 .venv/bin/tennis-ai analyze path/to/video.mp4 --output outputs/gap-tolerant --event-detector contact-v2
+.venv/bin/tennis-ai analyze path/to/video.mp4 --output outputs/strokes --event-detector contact-v2 --stroke-detector stroke-v1 --spin-detector wrist-v1
 .venv/bin/tennis-ai resume outputs/my-match
 .venv/bin/tennis-ai render outputs/my-match
 .venv/bin/tennis-ai package outputs/my-match outputs/portable-match
@@ -104,7 +105,7 @@ uv build --wheel --out-dir colab_delivery
 - **Ball:** pretrained sports-ball class until a custom single-class YOLO26s bundle is selected. A motion/position gate chooses one ball; stationary spare balls and tiny far-court balls remain difficult.
 - **Court:** 14 keypoints from the original 15-channel heatmap model, RANSAC geometry fit, recalibration at least once per second and after camera movement/cuts. Manual geometry is available when the model cannot fit.
 - **Ball gaps:** only gaps bounded by observations within 100 ms, within one scene, are interpolated. Hollow yellow dots mean inferred points; unknown intervals are never joined.
-- **Events and miniature court:** ground-contact estimates from ankles or box bottoms. An airborne ball is not projected as a landing point. Heuristic candidates propose hits, bounces and rallies without verified accuracy. Five stroke labels can be assigned manually; automatic strokes remain `unknown`. Only confirmed ground-contact locations appear in landing statistics. Scoring, measured ball speed and coaching diagnosis are not implemented.
+- **Events and miniature court:** ground-contact estimates from ankles or box bottoms. An airborne ball is not projected as a landing point. Heuristic candidates propose hits, bounces and rallies without verified accuracy. Five stroke labels can be assigned manually; automatic strokes remain `unknown` unless the opt-in `stroke-v1` candidates are selected. Only confirmed ground-contact locations appear in landing statistics. Scoring, measured ball speed and coaching diagnosis are not implemented.
 - **Video:** each decoded frame is processed, source presentation timestamps are normalized to start at zero and preserved to 1/90,000 second resolution in output. Audio is re-encoded, not bit-identical. Original orientation should be baked into pixels; rotated phone video is handled as described in the validation report. Full-court views are the target; cut detection is heuristic and can miss dissolves or rapid pans.
 
 ## Accuracy evaluation
@@ -127,15 +128,24 @@ A quick way to measure hit and spin candidates on your own short clips. Analyze 
 .venv/bin/python scripts/contact_labels.py template labels.csv 1 2 3
 ```
 
-Watch each clip **without the overlays** and add one row per racket contact: `clip`, `time_s` (contact time in seconds), `side` (`near` or `far`), `spin` (`topspin`, `slice`, `flat` or blank) and an optional note. Every listed clip is treated as fully labelled, so a clip with no rows has no hits. Then score the cached analyses:
+Watch each clip **without the overlays** and add one row per racket contact: `clip`, `time_s` (contact time in seconds), `side` (`near` or `far`), `stroke` (`serve`, `forehand`, `backhand`, `volley`, `overhead` or blank), `spin` (`topspin`, `slice`, `flat` or blank) and an optional note. Older sheets without a `stroke` column still work. Every listed clip is treated as fully labelled, so a clip with no rows has no hits. Then score the cached analyses:
 
 ```sh
-.venv/bin/python scripts/contact_labels.py score labels.csv outputs --spin-detector wrist-v1
+.venv/bin/python scripts/contact_labels.py score labels.csv outputs --stroke-detector stroke-v1 --spin-detector wrist-v1
 ```
 
-The report gives hit precision and recall at 0.1 s and 0.2 s for `baseline-v1` and `contact-v2`, and how often `wrist-v1` spin candidates agree with your labelled spins on matched hits (`correct`, `wrong` or `abstained`). This is a development check on your clips, not the frozen match-level benchmark in [EVALUATION_PROTOCOL.md](EVALUATION_PROTOCOL.md).
+The report gives hit precision and recall at 0.1 s and 0.2 s for `baseline-v1` and `contact-v2`, and how often the stroke and spin candidates agree with your labels on matched hits (`correct`, `wrong` or `abstained`). `technique_on_matched_hits` scores the forehand/backhand × topspin/slice/flat pair, such as a backhand slice, and `technique_confusion` lists which pairs were mistaken for which. This is a development check on your clips, not the frozen match-level benchmark in [EVALUATION_PROTOCOL.md](EVALUATION_PROTOCOL.md).
 
 `--spin-detector wrist-v1` on `analyze` adds the same unvalidated spin candidates to automatic hits. It reads the hitter's wrist height relative to the shoulder line around contact: high to low suggests slice, low to high topspin. Serves, overheads and unclear swings stay `unknown`, and reviewed or manual hits are never changed.
+
+`--stroke-detector stroke-v1` on `analyze` (or **Stroke type candidates** in the desktop app) suggests a stroke for automatic hits:
+
+- `serve`: a wrist far above the shoulders at the opening hit, away from the net
+- `volley`: within 6.9 m of the net with no bounce candidate since the opponent's shot
+- `forehand` / `backhand`: the side where the incoming ball passes the player, checked against the swing direction
+- `unknown`: weak or contradicting cues, and overheads that are not an opening hit
+
+It assumes right-handed players, so a left-handed player's forehands and backhands come out swapped. Review reports count each forehand/backhand × topspin/slice/flat pair as `technique.<stroke>.<spin>`. Like every candidate, these enter human-verified statistics only after review.
 
 ## Shot paths and tendencies
 

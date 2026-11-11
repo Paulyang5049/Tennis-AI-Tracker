@@ -4,7 +4,7 @@
   "required": ["schema_version", "definition_version", "view", "input_digest", "metrics"],
   "properties": {
     "schema_version": {"const": 1},
-    "definition_version": {"enum": ["review-loop-v1", "review-loop-v2"]},
+    "definition_version": {"enum": ["review-loop-v1", "review-loop-v2", "review-loop-v3"]},
     "view": {"enum": ["assisted", "human_verified"]},
     "participant_id": {"type": ["string", "null"]},
     "start": {"type": "number", "minimum": 0},

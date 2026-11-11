@@ -72,6 +72,11 @@ def main():
         choices=["broadcast-v1"],
         help="Broadcast video: histogram cut test and smoothed court calibration (opt-in)",
     )
+    analysis.add_argument(
+        "--stroke-detector",
+        choices=["stroke-v1"],
+        help="Unvalidated serve/forehand/backhand/volley candidates for automatic hits",
+    )
     resume = commands.add_parser("resume", help="Continue an interrupted analysis")
     resume.add_argument("output")
     render = commands.add_parser("render")
@@ -187,6 +192,7 @@ def main():
                     pose_stride=args.pose_stride,
                     view_filter=args.view_filter,
                     broadcast_scene=args.broadcast_scene,
+                    stroke_detector=args.stroke_detector,
                 ),
                 cancel,
                 lambda f, m: print(f"{f:.0%}: {m}", flush=True),

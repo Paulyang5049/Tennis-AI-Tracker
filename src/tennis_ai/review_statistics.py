@@ -92,6 +92,15 @@ def review_report(bundle, *, view="assisted", participant_id=None, start=0.0, en
         row = metric("spin." + spin, selected, excluded, refs=hit_denominator_refs)
         row["value"] = len(selected) if accepted else None
         metrics.append(row)
+    # Technique pairs such as a backhand slice; groundstrokes only.
+    for stroke in ("forehand", "backhand"):
+        for spin in SPINS:
+            selected = [e for e in accepted if e["stroke"] == stroke and e.get("spin") == spin]
+            row = metric(
+                f"technique.{stroke}.{spin}", selected, excluded, refs=hit_denominator_refs
+            )
+            row["value"] = len(selected) if accepted else None
+            metrics.append(row)
     landing_events, points, unassigned, skipped, refs = [], [], [], {}, []
     for bounce in events.values():
         if bounce["kind"] != "bounce":
@@ -210,7 +219,7 @@ def review_report(bundle, *, view="assisted", participant_id=None, start=0.0, en
     )
     return {
         "schema_version": 1,
-        "definition_version": "review-loop-v2",
+        "definition_version": "review-loop-v3",
         "view": view,
         "participant_id": participant_id,
         "start": start,
