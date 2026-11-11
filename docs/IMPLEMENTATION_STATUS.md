@@ -21,6 +21,20 @@ dataset split by game. Both are development evidence only; results and their lim
 [VALIDATION.md](../VALIDATION.md). An opt-in ball selector, `static-reject-v1`, drops
 detections that stay in one place. No ball or event model has been promoted.
 
+Also added 2026-11-11, all opt-in and development evidence only:
+
+- `tennis_ai.event_benchmark` and `learned-events-v1`: hit/bounce candidates trained on the
+  public games 1–6; `--event-detector learned-events-v1` (local weights) and
+  `--auto-links auto-v1` (candidate bounce landings and hit → bounce links for the assisted
+  view). The plan's landing gate is not passed.
+- `tennis_ai.scene_benchmark` and `--broadcast-scene broadcast-v1` (cut test for similar
+  shots, court smoothing).
+- Desktop **Tactics** tab with a scouting report export.
+- `stroke-v1` stroke candidates (merged from the stroke-candidates branch) and a macro-F1
+  stroke measure in `scripts/contact_labels.py`; the stroke gate needs human labels.
+- `ball_benchmark --ball-bundle` and a game-split YOLO ball dataset builder for local
+  fine-tuning.
+
 ## Implemented and locally exercised
 
 - Self-contained analysis folders, legacy export, source integrity checks and relative paths.
