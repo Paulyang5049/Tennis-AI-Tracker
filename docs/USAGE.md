@@ -77,6 +77,8 @@ Hit and bounce candidates, and cut and court stability, have their own benchmark
 .venv/bin/python -m tennis_ai.scene_benchmark data/public/tracknet/extracted/Dataset --cache outputs/scene-public/cache --output outputs/scene-public/report.json
 ```
 
+To use the learned model in an analysis, copy the trained file to `models/learned-events-v1.pt` and add `--event-detector learned-events-v1`; the run records its checksum. `--auto-links auto-v1` adds a candidate landing to each automatic bounce (the observed ball at the bounce frame through that frame's court fit) and links each hit to the next bounce in the same scene before the following hit. Both are unreviewed candidates, so they appear only in the assisted view of the Tactics tab and in `shots --view assisted`.
+
 `scene` caches players, poses, rackets and court geometry once (slow); scoring then takes seconds. `--ball truth` feeds the labelled ball to isolate the event logic. The learned model (`learned-events-v1`) trains on games 1–6 and picks thresholds on 7–8; its weights stay local because the dataset has no licence.
 
 An analysis folder contains:

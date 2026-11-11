@@ -144,6 +144,60 @@ three splits are out-of-sample.
 - It remains a candidate bundle: the in-sample TrackNet weights still score higher, and
   neither has a held-out result from other broadcasts.
 
+## Hit and bounce candidates on the public TrackNet dataset — 2026-11-11
+
+`python -m tennis_ai.event_benchmark` scores hit and bounce candidates against the dataset's
+516 hit and 523 bounce frames, split by game as above. Players, poses, rackets and court
+geometry were cached once with the pipeline's own models. A prediction matches a label
+within ±2 frames (67 ms). The landing estimate is the observed ball pixel at the predicted
+bounce frame, projected through the automatic court fit; the dataset has no court labels,
+so metre errors inherit that fit's error. `learned-events-v1` (opt-in, candidates only)
+was trained on games 1–6 with three ball sources (labelled, TrackNet and
+`ball-v0.2.0` + `static-reject-v1`), its thresholds were picked on games 7–8, and the test
+games 9–10 were scored once.
+
+Test games, ±2 frames (93 hits, 99 bounces):
+
+| Ball source | Detector | Hit P / R | Bounce P / R | Bounce within 0.5 m | Median landing error |
+|---|---|---:|---:|---:|---:|
+| Labelled ball | `baseline-v1` | 0.850 / 0.366 | 0.492 / 0.313 | 0.74 (31) | 0.12 m |
+| | `contact-v2` | 0.762 / 0.516 | 0.492 / 0.313 | 0.74 (31) | 0.12 m |
+| | `learned-events-v1` | 0.840 / 0.849 | 0.957 / 0.899 | 0.88 (89) | 0.00 m |
+| `ball-v0.2.0` + `static-reject-v1` (clean) | `baseline-v1` | 0.694 / 0.269 | 0.583 / 0.283 | 0.71 (28) | 0.19 m |
+| | `contact-v2` | 0.688 / 0.473 | 0.583 / 0.283 | 0.71 (28) | 0.19 m |
+| | `learned-events-v1` | 0.621 / 0.634 | 0.857 / 0.848 | 0.81 (81) | 0.12 m |
+| TrackNet (in-sample ball) | `baseline-v1` | 0.722 / 0.280 | 0.474 / 0.273 | 0.81 (27) | 0.12 m |
+| | `contact-v2` | 0.730 / 0.495 | 0.474 / 0.273 | 0.81 (27) | 0.12 m |
+| | `learned-events-v1` | 0.844 / 0.817 | 0.928 / 0.909 | 0.85 (89) | 0.10 m |
+
+- The learned model roughly doubles bounce recall and lifts bounce precision on every ball
+  source. With the labelled ball, a matched bounce's landing is the labelled point itself,
+  so its zero median error measures only frame timing.
+- **The plan's landing gate is not passed.** With the only clean ball source, bounce
+  precision is 0.857 (gate 0.90). The TrackNet row passes on precision, but that ball
+  detector was trained on these games. All rows are broadcast rally clips at 30 fps from
+  one dataset; nothing here is a held-out broadcast result.
+- Hits on the clean ball source stay weak (0.62 / 0.63): the ball is often lost near the
+  far player.
+- The weights stay local: the dataset has no licence.
+
+## Learned events and automatic links on a full broadcast — 2026-11-11
+
+`--event-detector learned-events-v1 --auto-links auto-v1` was run over the cached frames of
+the full broadcast (41,564 frames at 59.94 fps, resampled to the model's 30 fps), with
+`--view-filter main-view-v1`. No event labels exist for this match.
+
+| Detector | Hits | Bounces | Rallies | Bounces with a landing | Landing inside the court | Hit → bounce links |
+|---|---:|---:|---:|---:|---:|---:|
+| `contact-v2` | 166 | 46 | 27 | 35 | 29 | 32 |
+| `learned-events-v1` | 211 | 165 | 40 | 109 | 90 | 117 |
+
+A seeded sample of 16 bounces with a landing was inspected as still frames. About 10 showed
+the ball at the court surface, which a still cannot confirm as the contact frame. Six were
+wrong: two racket contacts, a toss, a pre-serve bounce, a ball near a ball kid off court, and
+one close-up that passed the main-view filter. Automatic landings therefore stay
+unreviewed candidates in the assisted view, and both options stay opt-in.
+
 ## Cut detection and court stability on the public TrackNet clips — 2026-11-11
 
 `python -m tennis_ai.scene_benchmark` uses structure the dataset guarantees instead of labels:

@@ -186,6 +186,21 @@ def train(sources, scene_rows, epochs=60, seed=0):
     return net, thresholds
 
 
+def save_model(path, net, thresholds, ball_sources=()):
+    torch.save(
+        {
+            "version": VERSION,
+            "inputs": net.layers[0].in_features,
+            "weights": net.state_dict(),
+            "thresholds": thresholds,
+            "trained_on_games": list(SPLITS["train"]),
+            "thresholds_from_games": list(SPLITS["val"]),
+            "ball_sources": list(ball_sources),
+        },
+        path,
+    )
+
+
 def main():
     from tennis_ai.event_benchmark import load_jsonl, truth_rows
 
@@ -202,20 +217,114 @@ def main():
     sources = [(list(truth_rows(args.dataset)), "truth")]
     sources += [(load_jsonl(path), "selected") for path in args.ball]
     net, thresholds = train(sources, scene_rows, args.epochs)
-    torch.save(
-        {
-            "version": VERSION,
-            "inputs": net.layers[0].in_features,
-            "weights": net.state_dict(),
-            "thresholds": thresholds,
-            "trained_on_games": list(SPLITS["train"]),
-            "thresholds_from_games": list(SPLITS["val"]),
-            "ball_sources": ["labelled ball", *(Path(p).name for p in args.ball)],
-        },
-        args.output,
-    )
+    save_model(args.output, net, thresholds, ["labelled ball", *(Path(p).name for p in args.ball)])
     print(json.dumps(thresholds))
 
 
 if __name__ == "__main__":
     main()
+
+
+STEP = 1 / 30  # The model's window is defined at 30 frames per second.
+
+
+def _segments(frames):
+    """Runs of frames within one scene and without a cut, in order."""
+    run: list[dict] = []
+    for frame in frames:
+        if run and (frame.get("cut") or frame.get("scene", 0) != run[-1].get("scene", 0)):
+            yield run
+            run = []
+        run.append(frame)
+    if run:
+        yield run
+
+
+def _resample(run):
+    """Nearest pipeline record for every 1/30 s step; a step without one stays empty."""
+    times = [float(f["timestamp"]) for f in run]
+    result, index, t = [], 0, times[0]
+    while t <= times[-1] + 1e-9:
+        while index + 1 < len(times) and abs(times[index + 1] - t) <= abs(times[index] - t):
+            index += 1
+        result.append(run[index] if abs(times[index] - t) <= STEP / 2 + 1e-6 else None)
+        t += STEP
+    return result
+
+
+def _scaled(player, scale):
+    out = {**player, "box": [v * scale for v in player["box"]]}
+    if player.get("pose"):
+        out["pose"] = [[x * scale, y * scale, c] for x, y, c in player["pose"]]
+    return out
+
+
+def stream_events(frames, weights, width=1280, rally_gap=2.0):
+    """Learned hit/bounce candidates (and rallies of two or more hits) for pipeline frames.
+
+    Frames are resampled to 30 fps and scaled to 1280 px wide, the training geometry.
+    A hit names the player whose wrist is nearest the ball at that step, if any.
+    """
+    from tennis_ai.events import new_event
+
+    detector = load_detector(weights)
+    scale = 1280 / width
+    events = []
+    for run in _segments(frames):
+        steps = _resample(run)
+        if len(steps) < 3:
+            continue
+        points = [
+            [v * scale for v in s["ball"]["xy"]]
+            if s and s.get("ball", {}).get("status") == "observed" and s["ball"].get("xy")
+            else None
+            for s in steps
+        ]
+        players = [[_scaled(p, scale) for p in (s or {}).get("players", [])[:4]] for s in steps]
+        x = torch.from_numpy(features(points, players))
+        with torch.inference_mode():
+            p = torch.softmax(detector.net(x), dim=1).numpy()
+        for index, kind in ((1, "hit"), (2, "bounce")):
+            for t in peaks(p[:, index], detector.thresholds[kind], NMS[kind]):
+                record = steps[t] or next(s for s in steps[t:] + steps[::-1] if s)
+                player_id = None
+                if kind == "hit" and points[t]:
+                    near = [
+                        (_reach(points[t], [pl]), pl["id"])
+                        for pl in players[t]
+                        if _reach(points[t], [pl]) < 1.0
+                    ]
+                    player_id = min(near)[1] if near else None
+                events.append(
+                    new_event(
+                        kind,
+                        float(record["timestamp"]),
+                        int(record.get("scene", 0)),
+                        int(record["frame"]),
+                        # A softmax score is not a calibrated probability; keep it out.
+                        player_id=player_id,
+                    )
+                )
+    hits = sorted((e for e in events if e["kind"] == "hit"), key=lambda e: e["start"])
+    rally: list[dict] = []
+    for hit in [*hits, None]:
+        if rally and (
+            hit is None
+            or hit["scene"] != rally[-1]["scene"]
+            or hit["start"] - rally[-1]["start"] > rally_gap
+        ):
+            if len(rally) >= 2:
+                first = rally[0]
+                events.append(
+                    new_event(
+                        "rally",
+                        max(0.0, first["start"] - 0.5),
+                        first["scene"],
+                        int(first["id"].rsplit("-", 1)[1]),
+                        end=rally[-1]["start"],
+                    )
+                )
+            rally = []
+        if hit is not None:
+            rally.append(hit)
+    return sorted(events, key=lambda e: (e["start"], e["kind"]))

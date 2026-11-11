@@ -478,6 +478,8 @@ EVENT_DETECTORS = {"baseline-v1": CandidateDetector, "contact-v2": ContactCandid
 
 
 def create_event_detector(version="baseline-v1"):
+    if version == "learned-events-v1":
+        return None  # Whole-clip model; see event_model.stream_events.
     if version not in EVENT_DETECTORS:
         raise ValueError("Unsupported event detector version")
     return EVENT_DETECTORS[version]()
@@ -756,12 +758,84 @@ def annotate_strokes(events, frames, detector="stroke-v1", rally_gap=2.0):
     return events
 
 
+LEARNED_DETECTOR = "learned-events-v1"
+AUTO_LINKS = ("auto-v1",)
+
+
+def place_bounces(events, frames):
+    """Candidate landing for automatic, unreviewed bounces: the observed ball at the bounce
+    frame through that frame's court fit. A bounce is ground contact, so this is bounce
+    evidence, not an airborne projection; frames without a ball or court leave it null.
+    """
+    from tennis_ai.geometry import project
+
+    wanted = {
+        (e["scene"], int(e["id"].rsplit("-", 1)[1])): e
+        for e in events
+        if e["kind"] == "bounce"
+        and e["provenance"] == "automatic"
+        and not e["reviewed"]
+        and e["position"] is None
+    }
+    for frame in frames:
+        event = wanted.get((int(frame.get("scene", 0)), int(frame["frame"])))
+        ball, court = frame.get("ball") or {}, frame.get("court")
+        if event is None or ball.get("status") != "observed" or not court:
+            continue
+        x, y = project([ball["xy"]], court["matrix"])[0].tolist()
+        if -3.5 <= x <= 14.5 and -6 <= y <= 30:
+            event["position"] = [round(x, 3), round(y, 3)]
+    return events
+
+
+def propose_links(events, links=(), window=3.0):
+    """Unreviewed hit -> bounce links: the first bounce after each hit, before the next hit,
+    in the same scene. Existing links are kept and their hits and bounces are skipped."""
+    taken_hits = {link["shot_id"] for link in links if not link.get("removed", False)}
+    taken_bounces = {link["bounce_id"] for link in links if not link.get("removed", False)}
+    ordered = sorted(
+        (e for e in events if e["kind"] in ("hit", "bounce") and not e["excluded"]),
+        key=lambda e: (e["start"], e["kind"] != "hit"),
+    )
+    result = list(links)
+    for index, hit in enumerate(ordered):
+        if hit["kind"] != "hit" or hit["id"] in taken_hits:
+            continue
+        for later in ordered[index + 1 :]:
+            if later["scene"] != hit["scene"] or later["start"] - hit["start"] > window:
+                break
+            if later["kind"] == "hit":
+                break
+            if later["id"] not in taken_bounces and later["start"] >= hit["start"]:
+                result.append(
+                    {
+                        "id": f"auto-{hit['id']}-{later['id']}",
+                        "shot_id": hit["id"],
+                        "bounce_id": later["id"],
+                        "reviewed": False,
+                        "confidence": None,
+                    }
+                )
+                taken_bounces.add(later["id"])
+                break
+    return result
+
+
 def candidate_events(
-    frames_path, detector="baseline-v1", spin_detector=None, stroke_detector=None, view_filter=None
+    frames_path,
+    detector="baseline-v1",
+    spin_detector=None,
+    stroke_detector=None,
+    view_filter=None,
+    weights=None,
+    width=1280,
+    auto_links=None,
 ):
     """Hit, bounce and rally candidates plus the selected opt-in stroke and spin rules.
 
     The view filter only gates event detection; stroke and spin read every frame.
+    ``learned-events-v1`` needs its local ``weights``; ``auto_links`` adds candidate
+    landings to automatic bounces (links are proposed by the caller that owns them).
     """
     from tennis_ai.views import event_frames
 
@@ -769,7 +843,16 @@ def candidate_events(
         with Path(frames_path).open() as stream:
             yield from (json.loads(line) for line in stream if line.strip())
 
-    candidates = list(generate_candidates(event_frames(frames_path, view_filter), detector))
+    if detector == LEARNED_DETECTOR:
+        from tennis_ai.event_model import stream_events
+
+        if not weights or not Path(weights).is_file():
+            raise FileNotFoundError("learned-events-v1 needs models/learned-events-v1.pt")
+        candidates = stream_events(event_frames(frames_path, view_filter), weights, width)
+    else:
+        candidates = list(generate_candidates(event_frames(frames_path, view_filter), detector))
+    if auto_links:
+        candidates = place_bounces(candidates, frames())
     if stroke_detector:
         candidates = annotate_strokes(candidates, frames(), stroke_detector)
     if spin_detector:
@@ -785,9 +868,11 @@ def regenerate_events(
     spin_detector=None,
     stroke_detector=None,
     view_filter=None,
+    weights=None,
+    width=1280,
 ):
     candidates = candidate_events(
-        frames_path, detector, spin_detector, stroke_detector, view_filter
+        frames_path, detector, spin_detector, stroke_detector, view_filter, weights, width
     )
     corrections = (
         json.loads(Path(corrections_path).read_text())

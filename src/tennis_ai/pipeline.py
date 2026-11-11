@@ -10,7 +10,13 @@ from pathlib import Path
 
 from tennis_ai import jobs
 from tennis_ai.artifacts import sha256
-from tennis_ai.events import SPIN_DETECTORS, STROKE_DETECTORS, create_event_detector
+from tennis_ai.events import (
+    AUTO_LINKS,
+    LEARNED_DETECTOR,
+    SPIN_DETECTORS,
+    STROKE_DETECTORS,
+    create_event_detector,
+)
 from tennis_ai.geometry import (
     CourtSmoother,
     associate_rackets,
@@ -51,6 +57,8 @@ class Settings:
     # Opt-in broadcast scene handling: histogram cut test plus court smoothing.
     broadcast_scene: str | None = None
     stroke_detector: str | None = None
+    # Opt-in candidate landings for automatic bounces plus hit -> bounce links (v3).
+    auto_links: str | None = None
 
     def __post_init__(self):
         if self.players not in (2, 4):
@@ -65,6 +73,8 @@ class Settings:
             raise ValueError("Unsupported broadcast scene handling")
         if self.view_filter not in (None, *VIEW_FILTERS):
             raise ValueError("Unsupported view filter")
+        if self.auto_links not in (None, *AUTO_LINKS):
+            raise ValueError("Unsupported automatic link version")
         if self.stroke_detector not in (None, *STROKE_DETECTORS):
             raise ValueError("Unsupported stroke detector version")
         if self.ball_model not in BALL_MODELS:
@@ -142,6 +152,18 @@ def fingerprints(root, settings, model_factory):
     return result
 
 
+def event_model(root, settings):
+    """Local weights for the learned event detector, checked before inference starts."""
+    if settings.event_detector != LEARNED_DETECTOR:
+        return None
+    path = Path(root) / "models" / f"{LEARNED_DETECTOR}.pt"
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"{LEARNED_DETECTOR} needs {path}; train it with python -m tennis_ai.event_model"
+        )
+    return {"path": str(path.resolve()), "sha256": sha256(path)}
+
+
 def load_summary(folder):
     folder = Path(folder)
     summary = json.loads((folder / "summary.json").read_text())
@@ -196,7 +218,8 @@ def _analyze(
     inference_settings = {
         k: v
         for k, v in asdict(settings).items()
-        if k not in ("event_detector", "spin_detector", "stroke_detector", "view_filter")
+        if k
+        not in ("event_detector", "spin_detector", "stroke_detector", "view_filter", "auto_links")
     }
     identity = {
         "source_sha256": sha256(source),
@@ -237,6 +260,7 @@ def _analyze(
                 "source_sha256": identity["source_sha256"],
                 "video": metadata,
                 "settings": asdict(settings),
+                "event_model": event_model(root, settings),
                 "versions": versions,
             }
             jobs.save(connection, "identity", identity)
@@ -530,6 +554,11 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
         spin_detector = summary["settings"].get("spin_detector")
         view_filter = summary["settings"].get("view_filter")
         stroke_detector = summary["settings"].get("stroke_detector")
+        auto_links = summary["settings"].get("auto_links")
+        learned = {
+            "weights": (summary.get("event_model") or {}).get("path"),
+            "width": summary["video"]["width"],
+        }
         if manifest and manifest["schema_version"] == 3:
             from tennis_ai.events import candidate_events
             from tennis_ai.evidence import load_evidence, persist_frame_tracks, validate_evidence
@@ -547,7 +576,15 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
                     spin_detector,
                     stroke_detector,
                     view_filter,
+                    auto_links=auto_links,
+                    **learned,
                 )
+                if auto_links:
+                    from tennis_ai.events import propose_links
+
+                    bundle["events"]["links"] = propose_links(
+                        bundle["events"]["events"], bundle["events"]["links"]
+                    )
                 validate_evidence(bundle, manifest["media"]["duration"])
                 atomic_json(relative_asset(output, artifacts["events"]), bundle["events"])
             with relative_asset(output, artifacts["frames"]).open() as stream:
@@ -563,6 +600,7 @@ def _render_cached(output, overlays=None, cancel=None, progress=None, check_sour
                 spin_detector,
                 stroke_detector,
                 view_filter,
+                **learned,
             )
         with relative_asset(output, artifacts["frames"]).open() as stream:
             summary["capture_quality"] = summarize_quality(

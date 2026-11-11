@@ -53,9 +53,9 @@ def main():
     )
     analysis.add_argument(
         "--event-detector",
-        choices=["baseline-v1", "contact-v2"],
+        choices=["baseline-v1", "contact-v2", "learned-events-v1"],
         default="baseline-v1",
-        help="contact-v2 is an unvalidated gap-tolerant hit candidate experiment",
+        help="contact-v2 and learned-events-v1 (needs models/learned-events-v1.pt) are opt-in",
     )
     analysis.add_argument(
         "--spin-detector",
@@ -66,6 +66,11 @@ def main():
         "--view-filter",
         choices=["main-view-v1"],
         help="Broadcast video: ignore close-ups, replays and crowd shots when finding events",
+    )
+    analysis.add_argument(
+        "--auto-links",
+        choices=["auto-v1"],
+        help="Candidate landings for automatic bounces and hit->bounce links (assisted view)",
     )
     analysis.add_argument(
         "--broadcast-scene",
@@ -193,6 +198,7 @@ def main():
                     view_filter=args.view_filter,
                     broadcast_scene=args.broadcast_scene,
                     stroke_detector=args.stroke_detector,
+                    auto_links=args.auto_links,
                 ),
                 cancel,
                 lambda f, m: print(f"{f:.0%}: {m}", flush=True),
