@@ -156,6 +156,7 @@ def main():
     parser.add_argument("--ball-tracker", choices=TRACKERS, default="baseline-v1")
     parser.add_argument("--root", default=str(Path.cwd()), help="Project assets folder")
     parser.add_argument("--model", choices=BALL_MODELS, default="yolo-coco")
+    parser.add_argument("--ball-bundle", help="Fine-tuned single-class ball bundle (YOLO)")
     parser.add_argument("--device", default="auto")
     parser.add_argument("--games", type=int, nargs="+", default=list(range(1, 11)))
     parser.add_argument("--frames", help="Also keep per-frame rows (JSONL) for later rescoring")
@@ -163,10 +164,21 @@ def main():
     args = parser.parse_args()
     models = Path(args.root) / "models"
     weights = models / ("tracknet_ball.pt" if args.model == "tracknet-v2" else "yolo26s.pt")
+    name = args.model
+    if args.ball_bundle:
+        from tennis_ai.artifacts import validate_bundle
+
+        if args.model != "yolo-coco":
+            parser.error("--ball-bundle replaces the yolo-coco detector only")
+        weights, _ = validate_bundle(args.ball_bundle, "ball")
+        name = f"bundle:{Path(args.ball_bundle).name}"
     if args.replay:
         with open(args.replay) as cached:
             rows = list(replay(map(json.loads, cached), args.ball_tracker))
-        result = report(rows, args.model, sha256(weights), args.ball_tracker)
+        if args.frames:
+            with open(args.frames, "w") as replayed:
+                replayed.writelines(json.dumps(row) + "\n" for row in rows)
+        result = report(rows, name, sha256(weights), args.ball_tracker)
         Path(args.output).write_text(json.dumps(result, indent=2) + "\n")
         return
     if not args.dataset:
@@ -180,10 +192,12 @@ def main():
 
         yolo: Any = YOLO(ultralytics_path(weights))
 
+        # Same call as the pipeline's detector pass: COCO sports ball, or the bundle's class.
+        classes = None if args.ball_bundle else [32]
+
         def detect(frame):
-            # Same call as the pipeline's detector pass, restricted to COCO sports ball.
             boxes = yolo.predict(
-                frame, device=device, verbose=False, classes=[32], conf=0.1, imgsz=1280
+                frame, device=device, verbose=False, classes=classes, conf=0.1, imgsz=1280
             )
             return [
                 {"box": row[:4].tolist(), "confidence": float(row[4])}
@@ -203,7 +217,7 @@ def main():
             print(f"game{row['game']} {row['clip']}", flush=True)
     if stream:
         stream.close()
-    result = report(rows, args.model, sha256(weights), args.ball_tracker)
+    result = report(rows, name, sha256(weights), args.ball_tracker)
     Path(args.output).write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result["results"]["5px"].get("test"), indent=2))
 

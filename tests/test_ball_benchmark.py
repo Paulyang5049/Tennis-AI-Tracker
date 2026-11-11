@@ -51,3 +51,19 @@ def test_public_ball_benchmark_counts_and_game_split(tmp_path):
     assert (test["frames"], test["tp"], test["candidate_recall"]) == (2, 2, 1.0)
     assert result["results"]["5px"]["train"]["frames"] == 4
     assert "val" not in result["results"]["5px"]
+
+
+def test_tracknet_yolo_dataset_keeps_games_apart(tmp_path):
+    from tennis_ai.training import prepare_tracknet_ball
+
+    make_game(tmp_path / "src", 1, [(1, 640, 360), (0, "", ""), (3, 10, 10), (1, 2, 2)])
+    make_game(tmp_path / "src", 9, [(1, 100, 100)])
+    data, audit = prepare_tracknet_ball(tmp_path / "src", tmp_path / "yolo", stride=1)
+    assert audit["counts"]["train"] == {"images": 3, "balls": 2}  # occluded frame dropped
+    assert audit["counts"]["test"] == {"images": 1, "balls": 1}
+    labels = tmp_path / "yolo" / "train" / "labels"
+    assert (labels / "g1_Clip1_0001.txt").read_text() == ""  # negative frame
+    edge = (labels / "g1_Clip1_0003.txt").read_text().split()
+    assert float(edge[1]) >= 8 / 1280  # box clamped inside the frame
+    assert (tmp_path / "yolo" / "train" / "images" / "g1_Clip1_0000.jpg").is_symlink()
+    assert "val" in data.read_text()

@@ -418,3 +418,86 @@ def train_court(workspace, drive_runs, epochs=50, smoke=False):
     finally:
         os.chdir(previous)
         sys.path.remove(str(workspace))
+
+
+BALL_BOX_PX = 16  # TrackNet labels are points; a fixed box at 1280 x 720 covers the ball.
+
+
+def prepare_tracknet_ball(dataset, destination, stride=2):
+    """YOLO ball dataset from the local TrackNet copy, split by whole game.
+
+    Images are symlinked, not copied, and stay local: the dataset has no licence, so
+    neither it nor weights trained on it may be redistributed. Train uses games 1-6,
+    val 7-8 and test 9-10 (the ball benchmark's split). Every ``stride``-th frame is
+    kept to limit near-duplicates; frames without a ball stay as negatives, and
+    occluded balls (visibility 3) are dropped rather than guessed.
+    """
+    from tennis_ai.ball_benchmark import SPLITS, clips
+
+    destination = Path(destination).resolve()
+    counts: dict[str, dict[str, int]] = {}
+    for split, games in SPLITS.items():
+        images, labels = destination / split / "images", destination / split / "labels"
+        images.mkdir(parents=True, exist_ok=True)
+        labels.mkdir(parents=True, exist_ok=True)
+        counts[split] = {"images": 0, "balls": 0}
+        for game, folder, rows in clips(dataset, games):
+            for index, row in enumerate(rows):
+                visibility = int(row["visibility"])
+                if index % stride or visibility == 3:
+                    continue
+                name = f"g{game}_{folder.name}_{Path(row['file name']).stem}"
+                link = images / f"{name}.jpg"
+                if not link.exists():
+                    link.symlink_to((folder / row["file name"]).resolve())
+                text = ""
+                if visibility:
+                    x, y = float(row["x-coordinate"]), float(row["y-coordinate"])
+                    w, h = BALL_BOX_PX / 1280, BALL_BOX_PX / 720
+                    cx, cy = (
+                        min(max(x / 1280, w / 2), 1 - w / 2),
+                        min(max(y / 720, h / 2), 1 - h / 2),
+                    )
+                    text = f"0 {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n"
+                    counts[split]["balls"] += 1
+                (labels / f"{name}.txt").write_text(text)
+                counts[split]["images"] += 1
+    config = (
+        f"path: {destination}\ntrain: train/images\nval: val/images\ntest: test/images\n"
+        "names:\n  0: tennis ball\n"
+    )
+    (destination / "data.yaml").write_text(config)
+    audit = {
+        "source": "TrackNet tennis dataset, local copy; no licence, not redistributable",
+        "splits": {name: list(games) for name, games in SPLITS.items()},
+        "stride": stride,
+        "box_px": BALL_BOX_PX,
+        "counts": counts,
+    }
+    (destination / "audit.json").write_text(json.dumps(audit, indent=2))
+    return destination / "data.yaml", audit
+
+
+def train_ball_local(data_yaml, runs, base, epochs=20, imgsz=1280, batch=8, device="mps"):
+    """Fine-tune on this machine (MPS/CPU/CUDA); the Colab helper above requires CUDA."""
+    from ultralytics import YOLO
+
+    model: Any = YOLO(ultralytics_path(base))
+    model.train(
+        data=str(data_yaml),
+        epochs=epochs,
+        patience=5,
+        imgsz=imgsz,
+        batch=batch,
+        device=device,
+        workers=2,
+        seed=42,
+        deterministic=True,
+        project=str(runs),
+        name="tracknet-ball",
+        exist_ok=True,
+        single_cls=True,
+        mosaic=0.0,  # Mosaic shrinks a 16 px ball below detectability at this size.
+        plots=False,
+    )
+    return Path(model.trainer.save_dir)
