@@ -49,6 +49,7 @@ def test_bounce_landing_and_links_are_unreviewed_candidates():
     ]
     place_bounces([hit, bounce, far, reviewed], frames)
     assert bounce["position"] == [5.0, 12.0]
+    assert bounce["position_source"] == "automatic_bounce"  # Accepted by v3 evidence checks.
     assert far["position"] is None and reviewed["position"] is None
     links = propose_links([hit, bounce, far])
     assert [(link["shot_id"], link["bounce_id"], link["reviewed"]) for link in links] == [

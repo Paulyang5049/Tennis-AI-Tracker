@@ -785,6 +785,7 @@ def place_bounces(events, frames):
         x, y = project([ball["xy"]], court["matrix"])[0].tolist()
         if -3.5 <= x <= 14.5 and -6 <= y <= 30:
             event["position"] = [round(x, 3), round(y, 3)]
+            event["position_source"] = "automatic_bounce"
     return events
 
 

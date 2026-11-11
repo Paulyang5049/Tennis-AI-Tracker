@@ -156,6 +156,7 @@ def validate_evidence(bundle, duration):
             confidence(value)
         if event.get("position") is not None and event.get("position_source") not in (
             "reviewed_bounce",
+            "automatic_bounce",
             "legacy_v2",
         ):
             raise ValueError("Landing requires bounce provenance")
