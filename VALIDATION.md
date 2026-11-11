@@ -125,4 +125,84 @@ The same 13 broadcast clips were analysed with `--ball-model tracknet-v2 --event
 
   Recall now sits close to the detector's ceiling (0.441, 0.477 and 0.476), so what remains is detector recall. Game 1 went from 0 to 445 correct frames of 1,920. With TrackNet detections the two selectors score the same to within 0.001. The dataset is 30 fps rally clips only; the selector has not been run through the full pipeline, on 25 or 60 fps footage, or on whole broadcasts, so `baseline-v1` stays the default.
 - On the Apple M4, YOLO ran at about 16 frames per second and TrackNet at about 4.5, reading images from an external drive.
-- The labels also mark 516 hit frames and 523 bounce frames. They have not been used yet.
+- The labels also mark 516 hit frames and 523 bounce frames. They are used by the event benchmark below.
+
+## Fine-tuned ball bundle on the public TrackNet dataset — 2026-11-11
+
+`ball-v0.2.0-candidate` (YOLO26s fine-tuned on the Roboflow tennis-ball set, never on
+TrackNet) was scored with `ball_benchmark --ball-bundle`. It never saw these games, so all
+three splits are out-of-sample.
+
+| Selector | Train P / R (5 px) | Validation P / R | Test P / R | Test P / R (10 px) | Right point among candidates (test, 5 px) |
+|---|---:|---:|---:|---:|---:|
+| `baseline-v1` | 0.551 / 0.431 | 0.342 / 0.234 | 0.659 / 0.615 | 0.716 / 0.668 | 0.804 |
+| `static-reject-v1` | 0.811 / 0.521 | 0.740 / 0.399 | 0.853 / 0.763 | 0.941 / 0.841 | 0.804 |
+
+- On the test games it beats the COCO detector with either selector (COCO with
+  `static-reject-v1`: 0.775 / 0.428). The validation games are harder for it (candidate
+  ceiling 0.437), so the gain is uneven across matches.
+- It remains a candidate bundle: the in-sample TrackNet weights still score higher, and
+  neither has a held-out result from other broadcasts.
+
+## Cut detection and court stability on the public TrackNet clips — 2026-11-11
+
+`python -m tennis_ai.scene_benchmark` uses structure the dataset guarantees instead of labels:
+each clip is one still-camera shot, so the clips of a split joined end to end give a known
+shot change at every boundary, any cut inside a clip is false, and any frame-to-frame move of
+the court estimate inside a clip is jitter. The `broadcast-v1` thresholds (frame difference
+> 0.03 and brightness-histogram distance > 0.10) were chosen on train, confirmed on
+validation, and test was scored once.
+
+| Split | Boundaries | Cut recall `baseline-v1` → `broadcast-v1` | False cuts | Court p95 jitter, raw → smoothed (px) | Jumps > 20 px, raw → smoothed |
+|---|---:|---:|---:|---:|---:|
+| Train | 55 | 0.00 → 0.18 | 0 → 0 | 5.13 → 0.97 | 137 → 58 |
+| Validation | 17 | 0.00 → 0.18 | 0 → 0 | 1.36 → 0.46 | 0 → 0 |
+| Test | 20 | 0.05 → 0.20 | 0 → 0 | 0.73 → 0.27 | 0 → 0 |
+
+- Most boundaries join two rallies filmed by the same wide camera; their frame difference
+  (median 0.021) overlaps the largest in-clip differences (0.015), so no appearance test can
+  find them. Boundary recall is a harsh lower bound, not broadcast cut recall.
+- The clips never pan, so the false-cut rate there says nothing about camera pans. On the
+  full broadcast (41,564 frames) the first version reported 630 cuts against the baseline's
+  17; a contact sheet showed most extra ones inside fast pans and slow-motion replays. The
+  histogram test now also requires the frame difference to be an isolated step (more than
+  three times the previous frame's difference plus 0.01). With that, it reported 84 cuts.
+  Of the first 40 cuts only it found, about 39 were real changes between the wide view,
+  close-ups and crowd shots that `baseline-v1` missed, and one looked like a cut inside one shot.
+  The public-clip figures above are unchanged by the step rule. No cut labels exist, so
+  this is a development check.
+- Court coverage did not change (≥ 0.96 in every split): the two-second hold rarely bridges
+  a failed fit here.
+
+## `static-reject-v1` on a full broadcast — 2026-11-11
+
+Both selectors were replayed over the cached ball candidates and court geometry of the full
+broadcast run (41,564 frames at 59.94 fps, 1920 × 1080), so this is the pipeline's ball stage
+with court geometry and without re-running any model. No ball labels exist for this match.
+
+| Measure | `baseline-v1` | `static-reject-v1` |
+|---|---:|---:|
+| Frames with an observed ball | 20,599 | 18,917 |
+| Busiest 6-px cell (frames) | 1,509 at (108, 228) | 108 at (462, 912) |
+| Second busiest cell | 1,465 at (462, 912) | 42 |
+| Main-view `contact-v2` hits / rallies / bounces | 166 / 27 / 46 | 193 / 32 / 49 |
+
+- The two selectors chose the same point in 16,200 frames. 1,863 frames had a ball only
+  under the baseline, 181 only under the new selector and 2,536 a different point.
+- A seeded sample of 24 baseline-only frames showed the scoreboard's tournament logo, a
+  giant decorative ball in the stands, the umpire chair, court-line marks and a ball held by
+  a ball kid. None was a ball in flight. In 8 inspected frames where the selectors
+  disagreed, the baseline point was a fixed graphic or object and the new point lay over the court.
+- More hit and rally candidates is not evidence of better events, because none of them is
+  labelled. `baseline-v1` stays the default: changing it needs labelled held-out events.
+
+## Stroke classification measure — 2026-11-11
+
+`scripts/contact_labels.py score` now reports per-class precision, recall and F1 for serve,
+forehand and backhand and their macro F1, with abstentions counted as misses. The plan's T5
+gate is a macro F1 of at least 0.80 on human labels from matches not used for tuning.
+
+On the 86 hits the coding assistant judged on 2026-11-04 (a visual check, not human
+labels, on the strips used to tune `stroke-v1`), `stroke-v1` reaches a macro F1 of 0.975
+(serve 1.000, forehand 0.974, backhand 0.952; 5 abstentions). This is tuning evidence on
+in-sample clips; the gate stays open until a player or coach labels another match.

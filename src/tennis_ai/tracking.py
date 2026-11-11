@@ -229,6 +229,7 @@ class SceneMonitor:
             raise ValueError("Unsupported cut detector")
         self.version = version
         self.previous = None
+        self.last_difference = 0.0
 
     @staticmethod
     def _histogram(gray):
@@ -241,13 +242,16 @@ class SceneMonitor:
         if self.previous is not None:
             difference = float(np.mean(cv2.absdiff(gray, self.previous))) / 255
             cut = difference > 0.24
-            if not cut and self.version == "broadcast-v1" and difference > 0.08:
-                # Broadcast cuts between similar-looking shots (wide view to replay of the
-                # wide view) change the brightness distribution more than a pan does.
+            spike = difference > 3 * self.last_difference + 0.01
+            self.last_difference = difference
+            if not cut and self.version == "broadcast-v1" and difference > 0.03 and spike:
+                # Broadcast cuts between similar-looking shots change the brightness
+                # distribution in one isolated step; a pan or slow-motion replay changes
+                # it over many frames, so the step must stand out from the previous one.
                 change = cv2.compareHist(
                     self._histogram(self.previous), self._histogram(gray), cv2.HISTCMP_BHATTACHARYYA
                 )
-                cut = change > 0.25
+                cut = change > 0.10
             if not cut:
                 shift, response = cv2.phaseCorrelate(
                     self.previous.astype(np.float32), gray.astype(np.float32)

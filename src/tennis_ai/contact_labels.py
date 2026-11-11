@@ -69,6 +69,48 @@ def _agreement(counter, truth, guess):
         ] += 1
 
 
+GATE_CLASSES = ("serve", "forehand", "backhand")
+GATE_MACRO_F1 = 0.80
+
+
+def stroke_classification(pairs):
+    """Per-class precision/recall/F1 and macro F1 over serve, forehand and backhand.
+
+    pairs: (label, guess) strokes on matched hits whose label is a gate class. An
+    abstention (`unknown`) or any other guess is a miss for the labelled class, so a
+    detector cannot raise its score by abstaining. This is the plan's T5 measure; it
+    is a promotion gate only on human labels from matches never used for tuning.
+    """
+    rows = {}
+    pairs = [(t, g) for t, g in pairs if t in GATE_CLASSES]
+    for kind in GATE_CLASSES:
+        tp = sum(t == kind and g == kind for t, g in pairs)
+        predicted = sum(g == kind for _, g in pairs)
+        support = sum(t == kind for t, _ in pairs)
+        precision = tp / predicted if predicted else None
+        recall = tp / support if support else None
+        f1 = (
+            2 * precision * recall / (precision + recall)
+            if precision and recall
+            else (0.0 if support else None)
+        )
+        rows[kind] = {
+            "support": support,
+            "precision": _rate(tp, predicted),
+            "recall": _rate(tp, support),
+            "f1": round(f1, 3) if f1 is not None else None,
+        }
+    scored = [row["f1"] for row in rows.values() if row["f1"] is not None]
+    macro = round(sum(scored) / len(scored), 3) if len(scored) == len(GATE_CLASSES) else None
+    return {
+        "classes": rows,
+        "macro_f1": macro,
+        "abstained": sum(g == "unknown" for _, g in pairs),
+        "gate_macro_f1": GATE_MACRO_F1,
+        "meets_gate_threshold": None if macro is None else macro >= GATE_MACRO_F1,
+    }
+
+
 def _technique(event):
     pair = f"{event['stroke']}/{event.get('spin') or 'unknown'}"
     return pair if pair in TECHNIQUES else "unknown"
@@ -97,6 +139,7 @@ def score(
             stroke: Counter[str] = Counter()
             technique: Counter[str] = Counter()
             confusion: Counter[str] = Counter()
+            stroke_pairs: list[tuple[str, str]] = []
             for clip in clips:
                 frames = frames_for(clip)
                 predicted = [e for e in generate_candidates(frames, detector) if e["kind"] == "hit"]
@@ -115,6 +158,7 @@ def score(
                     guess, label = predicted[i], truth[j]
                     _agreement(spin, label["spin"], guess.get("spin") or "unknown")
                     _agreement(stroke, label["stroke"], guess["stroke"])
+                    stroke_pairs.append((label["stroke"], guess["stroke"]))
                     _agreement(technique, _technique(label), _technique(guess))
                     if _technique(label) != "unknown":
                         confusion[f"{_technique(label)} -> {_technique(guess)}"] += 1
@@ -126,6 +170,7 @@ def score(
                 "recall": _rate(tp, tp + fn),
                 "spin_on_matched_hits": dict(spin),
                 "stroke_on_matched_hits": dict(stroke),
+                "stroke_classification": stroke_classification(stroke_pairs),
                 "technique_on_matched_hits": dict(technique),
                 "technique_confusion": dict(sorted(confusion.items())),
             }

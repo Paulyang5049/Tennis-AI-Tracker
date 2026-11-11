@@ -63,3 +63,22 @@ def test_score_reports_stroke_and_technique_agreement():
     assert loose["stroke_on_matched_hits"] == {"abstained": 1}
     assert loose["technique_on_matched_hits"] == {"abstained": 1}
     assert loose["technique_confusion"] == {"backhand/slice -> unknown": 1}
+
+
+def test_stroke_macro_f1_counts_abstentions_as_misses():
+    from tennis_ai.contact_labels import stroke_classification
+
+    pairs = [("serve", "serve")] * 4 + [("forehand", "forehand")] * 3 + [("forehand", "unknown")]
+    pairs += [("backhand", "backhand")] * 2 + [("backhand", "forehand"), ("volley", "volley")]
+    result = stroke_classification(pairs)
+    assert result["classes"]["serve"]["f1"] == 1.0
+    assert result["classes"]["forehand"] == {
+        "support": 4,
+        "precision": 0.75,
+        "recall": 0.75,
+        "f1": 0.75,
+    }
+    assert result["abstained"] == 1 and result["classes"]["backhand"]["support"] == 3
+    assert result["macro_f1"] == round((1.0 + 0.75 + 0.8) / 3, 3)
+    assert result["meets_gate_threshold"] is True
+    assert stroke_classification([("serve", "serve")])["macro_f1"] is None  # classes missing
